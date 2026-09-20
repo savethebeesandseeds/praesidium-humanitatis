@@ -1,0 +1,10 @@
+/.build/
+/.temp/
+__pycache__/
+*.py[cod]
+*.user
+.DS_Store
+# Vendor entitlements must never be committed.
+ampl.lic
+ampl.lic.*
+*.license-key

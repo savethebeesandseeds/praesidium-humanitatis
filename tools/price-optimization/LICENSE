@@ -1,0 +1,250 @@
+Praesidium Humanitatis Worker Protection License 1.0
+License identifier: LicenseRef-Praesidium-Humanitatis-Worker-Protection-1.0
+Copyright (c) 2026 Waajacu
+
+Custom source-available terms; legal review pending. This is not the MIT
+License, the GNU AGPL, or an OSI-approved open-source license.
+
+1. Scope and definitions
+
+"Covered Material" means the original project-authored source, models,
+documentation, tests, and build/deployment scripts in tools/price-optimization
+distributed with this license, and modifications or derivative works of that
+material. A copy remains covered when moved, renamed, embedded, or translated.
+Expressly identified third-party material, previously MIT-licensed material,
+and files or portions expressly offered under other terms by their copyright
+holders are excluded and retain their own licenses. Downstream recipients
+cannot remove these conditions by relabeling Covered Material. This license
+does not revoke any permission already granted for an earlier version under
+another license.
+
+"Licensor" means each copyright holder offering its Covered Material under
+these terms. "You" means the person or entity exercising permission under this
+license. Acting for an entity requires authority to bind that entity.
+
+"Covered Source" is the preferred editable form of Covered Material, including
+your covered changes, models, interface definitions, and scripts needed to
+build and install it. It excludes independently licensed third-party programs,
+general-purpose system tools, credentials, personal data, and operational data.
+Provide documented configuration schemas and non-sensitive sample values so
+that excluding those items does not conceal covered implementation changes.
+
+"Deployment" includes running Covered Material yourself or having it run for
+you, in a local process, library, service, hosted system, or other arrangement.
+Using a separate application or a human intermediary to apply the resulting
+recommendations does not remove your Deployment from these conditions.
+
+"Productive Deployment" means a Deployment used to make, recommend, evaluate,
+or automate actual prices, production, allocation, work, or other operational
+decisions for a store, factory, service, or other productive unit. Offline
+education, development, and research that do not direct or evaluate actual
+operational decisions are not Productive Deployments. Calling an operational
+deployment a pilot, experiment, nonprofit activity, or advisory service does
+not create an exception.
+
+"Workers" are the people who regularly perform the labor of the productive
+unit, including part-time, temporary, agency, and contract workers and workers
+on protected leave. Employment labels must not be used to deny these rights.
+"Net Surplus" is the unit's revenue after necessary, reasonable operating
+costs, fair labor compensation, taxes, and democratically approved reserves.
+"Essentials" are goods or services needed for basic nutrition, drinking water,
+shelter, sanitation, necessary healthcare, basic energy, or access to those
+goods and services.
+
+2. Conditional permission
+
+Subject to all these terms, each Licensor grants you a worldwide, nonexclusive,
+royalty-free copyright license to use, run, reproduce, study, modify, display,
+distribute, and host its Covered Material, including charging for compliant
+copies, work, or services. A Licensor also grants the patent rights it controls
+that are necessarily infringed by its contributed Covered Material alone.
+No rights to trademarks, third-party software, or third-party patents are
+granted. All grants remain effective while you comply and may terminate only
+as provided here. No payment buys an exception to these conditions.
+
+Sections 3 through 6 are conditions of these grants to the extent permitted
+by applicable law, and obligations you undertake when accepting this license.
+No permission is needed for rights that applicable law gives you independently
+of this license. You may decline these terms and refrain from exercising the
+permissions they offer.
+
+3. Prohibited uses and facilitation
+
+You must not use Covered Material, or intentionally or knowingly supply,
+configure, support, or operate it for another party, to do any of the following:
+
+(a) Enable slavery, trafficking, debt bondage, involuntary labor under threat
+    of a penalty, confiscation of identity documents to prevent departure, or
+    the withholding of earned pay to compel continued labor. Consent must be
+    informed, freely given, and withdrawable without coercion. Prohibited
+    conduct remains prohibited even if a local authority permits it.
+
+(b) Coerce workers through deprivation of essentials, threats to immigration
+    status or family, unlawful confinement, or punitive manipulation of work
+    or pay; suppress collective organizing or lawful collective action;
+    retaliate against reporting harm, exercising the rights in section 4,
+    refusing dangerous work, or challenging an automated decision; or use
+    surveillance to identify, intimidate, or punish people for those acts.
+
+(c) Set or coordinate prices, access, or allocations that disadvantage people
+    because of race, ethnicity, caste, religion, sex, gender, sexual orientation,
+    disability, age, nationality, migration status, or protected labor activity,
+    including through intentionally selected proxies. Fair, transparent
+    assistance that improves access for disadvantaged people is permitted.
+
+(d) Price Essentials by exploiting an individual's distress, dependence,
+    inability to leave, lack of alternatives, or inferred willingness to pay;
+    manufacture scarcity by withholding usable essential stock to increase
+    prices; or raise essential prices during an emergency beyond documented
+    increases in reasonable supply and operating costs. Price differences
+    must have a documented cost, accessibility, or need-based justification.
+
+(e) Identify, track, rank, or target people for persecution, arbitrary detention,
+    violence, or denial of fundamental rights; perform indiscriminate monitoring
+    of people's private lives; or enable torture, physical abuse, or the worst
+    forms of child labor, including hazardous or coerced child labor.
+
+You must not deliberately avoid clear evidence of these uses or use affiliates,
+contractors, subprocesses, or intermediaries to evade these conditions. Upon
+credible evidence of a prohibited use in a Deployment you control or support,
+promptly investigate, stop the affected use or support, preserve non-sensitive
+evidence, and apply section 7. Merely publishing a compliant general-purpose
+copy does not impose a duty to identify or surveil every unknown recipient.
+
+4. Worker control and benefit in Productive Deployments
+
+Before and throughout a Productive Deployment, you must ensure that each
+productive unit whose operations it serves has enforceable written rules and
+actual practices satisfying all of the following:
+
+(a) Workers exercise final democratic control, with equal voting rights per
+    worker, over deployment objectives, pricing and access constraints,
+    compensation policy, allocation of Net Surplus, and appointment and removal
+    of those entrusted with operational authority. Workers may delegate routine
+    decisions but can recall delegates and change or stop the Deployment.
+    Capital ownership, a founder, a platform, or an outside investor must not
+    confer a veto or override these worker decisions.
+
+(b) Net Surplus belongs collectively to the Workers, who decide its allocation
+    to labor-based distributions, reserves, reinvestment, and community benefit.
+    No passive owner, shareholder, founder, licensor, or related party may take
+    dividends, equity appreciation realized from the unit's surplus, profit
+    shares, or equivalent extraction merely for owning or controlling capital.
+    Genuine, documented operating purchases and reasonable fixed financing
+    costs are permitted; sham rent, debt, management fees, or other transfers
+    used to disguise extraction are not. Financing may not transfer control.
+
+(c) Workers have timely access to understandable objectives, constraints,
+    decision records, financial accounts, and surplus allocations, with privacy
+    safeguards. They can contest results and obtain review by accountable
+    people with power to pause, reverse, or remedy a decision. A software
+    system must not be the sole unaccountable authority over these rights.
+
+(d) Work is voluntary and fairly compensated, at least to applicable lawful
+    wage and safety standards. A democratic vote cannot waive an individual's
+    protections in section 3 or authorize unsafe or coercive conditions.
+
+Legal title may be held by a cooperative, trust, association, or other suitable
+entity; its substance must satisfy these conditions. They apply to the units
+using the Deployment, not automatically to unrelated activities. A managed
+optimization service is itself a productive unit, and the client units served
+by its operational recommendations must also comply. Obtain their written
+commitment before operational service and stop serving a noncompliant use.
+
+5. Copies, derivatives, and hosted access
+
+Every distributed copy of Covered Material must retain copyright and
+attribution notices, include this complete license, clearly identify covered
+files, and identify your modifications and their dates. Each recipient receives
+the grants directly from the relevant Licensors under these same terms.
+License your copyrightable changes to Covered Material under this exact version
+of these terms; you may not offer those changes under weaker alternative terms
+or impose terms that prevent recipients from exercising the rights here.
+
+With any distributed executable or other non-source form, provide its complete
+Covered Source under these terms through an accompanying copy or a working,
+clearly identified, no-charge download. Access to that source may not require
+an additional contract, non-disclosure promise, or purchase. Keep the download
+available for at least three years after your last distribution of that build.
+
+If you modify Covered Material and make it available for interaction over a
+network, including through a separate service, offer every interacting user
+and the Workers of affected productive units the Covered Source of the running
+version without charge. Put an accessible source link in the service interface
+or documented API and give Workers a usable copy or link. Keep the source
+available throughout that service and for three years after it ends. Sensitive
+data and credentials must be excluded as defined in section 1.
+
+Independent works that merely invoke the engine through an interface can keep
+their own licenses, including MIT. Aggregating or connecting them does not
+relicense them, and does not waive these terms for the Covered Material or
+your Deployment. Outputs consisting only of prices, facts, or other data are
+not Covered Material merely because the engine generated them; your use of
+the engine to generate operational outputs is still subject to these terms.
+Do not distribute a combination if another component's terms prevent you
+from meeting these obligations. This license grants no right to redistribute
+AMPL, its SDK, solver binaries, license files, or other third-party material.
+
+6. Accountable and privacy-respecting deployment
+
+For a Productive Deployment, maintain an accurate deployment notice identifying
+the responsible operator, a worker-accessible contact for concerns, the engine
+version, the applicable license, and a plain-language description of its purpose.
+Make this notice accessible to Workers and service users. Keep written records
+of worker governance, approved objectives and constraints, material changes,
+aggregate surplus allocation, and responses to substantiated harm reports for
+the deployment's duration and two years afterward, subject to mandatory law.
+Give Workers an understandable report on these matters at least annually.
+
+Upon a Licensor's written request explaining specific evidence of a material
+breach, provide, within 30 days, a good-faith written explanation supported by
+relevant, appropriately redacted records, or explain any lawful impediment
+and provide an aggregate or independent verification alternative. No routine
+telemetry, access to your systems, public reporting of individual records, or
+identification of complainants is required or authorized by this provision.
+Do not collect unnecessary personal data to prove compliance. Protect workers
+and complainants from retaliation and disclosure that could expose them to harm.
+
+7. Breach, cessation, cure, and remedies
+
+Your grants terminate automatically upon a material breach of sections 3 or 4.
+Stop the affected Deployment immediately and cease other exercises of these
+grants. Following such a breach, reinstatement requires the affected Licensor's
+express written permission after cessation, correction, and a documented plan
+to prevent recurrence and address harm. Affected people retain their independent
+legal rights; reinstatement does not settle or waive their claims.
+
+For a breach confined to notice, source delivery, or recordkeeping under
+sections 5 or 6, you have 30 days from discovering it or receiving written
+notice, whichever is earlier, to fully correct it. Your grants terminate if
+you fail to do so. A first such breach corrected within that period does not
+terminate the grants. This cure period never authorizes continued prohibited
+conduct or denial of worker control.
+
+After termination you may retain an inactive archival copy solely as required
+by law, to preserve evidence, or to prepare a cure; no productive operation or
+further distribution is permitted without reinstatement. Compliant downstream
+recipients do not lose their own grants because of your breach. Accrued
+obligations, retained notices, confidentiality of protected records, and
+liability for past breaches survive termination. Licensors may seek remedies
+available under applicable law, including an injunction or damages where a
+court permits them. No automatic penalty or guaranteed remedy is created.
+
+8. No warranty; limits; interpretation
+
+Covered Material is supplied as available, without promises of accuracy,
+fitness, safety, noninfringement, or uninterrupted operation. To the extent
+law permits, Licensors disclaim warranties and liability for losses arising
+from its use. This does not exclude liability that law prohibits excluding,
+or excuse your obligations to people affected by your Deployment.
+
+No endorsement, certification, employment relationship, or partnership is
+created by this license. Passing a technical policy check is not proof of
+legal compliance. Applicable mandatory law and legally protected rights remain
+in force. If a term cannot be enforced, a court may preserve the remaining
+terms only to the extent consistent with their purpose and applicable law;
+there is no intent to grant unrestricted use if the core conditions in
+sections 3 or 4 cannot be enforced. No governing jurisdiction or exclusive
+court is selected by this text. A waiver must be express and made by the
+Licensor whose rights it concerns. Later license versions do not automatically
+replace this version or diminish rights already granted under other licenses.

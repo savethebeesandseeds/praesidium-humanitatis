@@ -1,0 +1,13 @@
+{
+  "license": "Vendor SDK retains its own terms; not included in source distribution",
+  "source": "https://dev.ampl.com/ampl/reference/apis.html",
+  "url": "https://portal.ampl.com/dl/modules/amplapi-module.linux64.tgz",
+  "platform": "linux-amd64",
+  "api_version": "3.2.0",
+  "module_version": "20260717",
+  "retrieved": "2026-09-20",
+  "observed_sha256": "32e2e619c0d5fdb140a167916e59ff9a933fc4d904fe4852187f5f3ef68ee591",
+  "integrity_note": "Locally recorded digest of the official HTTPS download; not an independently published vendor checksum.",
+  "staged_path": ".build/deps/amplapi",
+  "runtime_activation": false
+}

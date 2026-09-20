@@ -1,16 +1,6 @@
-Repository license scope
+MIT License 
 
-The MIT license below applies to repository material except files expressly
-covered by another license. tools/temporal-fusion-transformer is MIT licensed.
-New original material in tools/price-optimization is covered exclusively by
-that directory's LICENSE (LicenseRef-Praesidium-Humanitatis-Worker-Protection-1.0),
-not by this MIT grant, except files or portions expressly licensed otherwise
-by their copyright holders. Third-party material retains its own terms.
-Existing MIT grants are not revoked. See docs/licensing.md for boundaries.
-
-MIT License
-
-Copyright (c) 2026 Waajacu
+Copyright (c) 2013-2025 Niels Lohmann
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

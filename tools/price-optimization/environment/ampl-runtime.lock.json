@@ -1,0 +1,29 @@
+{
+  "source": "https://dev.ampl.com/ampl/python/docker.html#other-docker-containers",
+  "platform": "linux-amd64",
+  "retrieved": "2026-09-20",
+  "staged_path": ".build/deps/ampl",
+  "license_mode_observed": "Bundled AMPL Demo license, maintenance through 2027-01-31",
+  "license_activation_performed": false,
+  "operational_store_entitlement_established": false,
+  "integrity_note": "Observed hashes of the official HTTPS downloads; not independently published vendor checksums. Vendor binaries and notices remain ignored local dependencies.",
+  "modules": [
+    {
+      "name": "ampl",
+      "url": "https://portal.ampl.com/dl/modules/ampl-module.linux64.tgz",
+      "observed_sha256": "13162a03b24ac7cf87d1fd79c24d503f3ab1f2f63a95e9bd7c1f8521e9f187f6",
+      "reported_version": "20260809",
+      "module_metadata_version": "20240313",
+      "note": "The executable reports a newer version than the archive's module metadata. Both values are preserved here."
+    },
+    {
+      "name": "highs",
+      "url": "https://portal.ampl.com/dl/modules/highs-module.linux64.tgz",
+      "observed_sha256": "f4e896fc5da49f485258b886553ab69eb48754732946d6dd42289ab891cc5656",
+      "reported_version": "1.15.1",
+      "driver_version": "20260813",
+      "mp_version": "20260806",
+      "module_metadata_version": "20260813"
+    }
+  ]
+}

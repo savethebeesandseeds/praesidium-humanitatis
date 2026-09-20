@@ -1,0 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Praesidium-Humanitatis-Worker-Protection-1.0
+#pragma once
+namespace ph::price::detail {
+inline constexpr char model_text[] = R"PH_AMPL_MODEL(@PH_PRICE_MODEL_TEXT@)PH_AMPL_MODEL";
+}

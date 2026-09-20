@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT; Copyright (c) 2026 Waajacu -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An offline, inspectable store operations simulator for post-profit-exchange.">
+  <title>post-profit-exchange</title>
+  <style>__STYLE__</style>
+</head>
+<body>
+  <header>
+    <h1>post-profit-exchange</h1>
+    <p><strong>C++ / WebAssembly — bounded exact solver (not AMPL)</strong></p>
+    <p>Offline research simulation of a store within the exchange. Synthetic demand and costs; no live prices or payments.</p>
+    <p>The optimized policy maximizes the existing engine's forecast worker surplus at replacement cost under its constraints. The specification's later objective stages are not implemented here. The fixed-price comparison uses the same external demand and cost draws.</p>
+    <nav aria-label="Page sections"><a href="#configuration">Configuration</a> · <a href="#results">Results</a> · <a href="#daily-ledger">Daily ledger</a> · <a href="#day-detail">Day detail</a> · <a href="#licenses">Licenses</a></nav>
+  </header>
+  <main>
+    <section aria-labelledby="controls-heading">
+      <h2 id="controls-heading">Simulation</h2>
+      <div class="actions">
+        <button type="button" id="step">Step one day</button>
+        <button type="button" id="run">Run all days</button>
+        <button type="button" id="stop" disabled>Stop</button>
+        <button type="button" id="reset">Reset results</button>
+        <button type="button" id="defaults">Restore defaults</button>
+        <button type="button" id="export-json" disabled>Export JSON</button>
+        <button type="button" id="export-csv" disabled>Export CSV</button>
+      </div>
+      <p id="status" role="status" aria-live="polite">Ready. Choose Step one day or Run all days.</p>
+      <p class="note">Step replays days 1 through the selected day with the same seed. Stop terminates the worker; it preserves the last completed result. All money is in integer minor currency units (cents for EUR/USD); 10,000 basis points = 1×.</p>
+      <pre id="error" role="alert" hidden></pre>
+    </section>
+    <section id="configuration" aria-labelledby="configuration-heading">
+      <h2 id="configuration-heading">Configuration</h2>
+      <form id="config-form">
+        <fieldset><legend>Horizon, cash, and daily obligations</legend><div class="fields" id="global-fields"></div></fieldset>
+        <fieldset><legend>Shock</legend><p class="note">Days are numbered from 1; use start = 0 and end = 0 to disable. Factors of 10,000 leave demand and unit cost unchanged.</p><div class="fields" id="shock-fields"></div></fieldset>
+        <fieldset><legend>Forecast scenarios (exactly three)</legend><p class="note">Probabilities must be positive and sum to one. Scenario factors multiply forecast demand.</p><div class="table-scroll"><table id="scenario-table"><thead><tr><th scope="col">Scenario ID</th><th scope="col">Demand factor (basis points)</th><th scope="col">Probability</th></tr></thead><tbody></tbody></table></div></fieldset>
+        <div class="section-title"><h3>Products (1–3)</h3><button type="button" id="add-product">Add product</button></div>
+        <div id="product-fields"></div>
+      </form>
+      <details id="assumptions"><summary>Demand formula, day order, and accounting assumptions</summary>
+        <p>Demand is a synthetic price response, not measured elasticity. Before integer rounding: <code>base demand × max(0, 1 − slope × (price − reference price) / reference price) × shock factor × variation factor</code>. Slope and factors are divided by 10,000. The C++ implementation truncates the slope quotient and rounds scaled quantities; the exact forecast and realized units are in each daily record.</p>
+        <p>The configured shock is known to that day's forecast before prices are chosen. Forecast scenarios use their three configured factors and probabilities. Realized demand instead uses the seeded per-product noise draw in the range 10,000 ± the noise setting. Both policies receive the same draws; their different prices can produce different demand quantities.</p>
+        <p>Each day replenishes stock toward its target first, using available procurement cash in the listed product order. It protects the existing reserve and known wage and operating obligations from procurement. Changing product order can change purchases when the budget is scarce. Initial stock is an endowment valued at its base unit cost; its value is additional to initial cash.</p>
+        <p>The price decision follows procurement. Each selected price must satisfy the price ceiling and change cap, and all forecast scenarios must fit stock and cover that day's protected obligations at replacement cost. The fixed-price policy faces these same checks. An infeasible day has no trades; purchases, spoilage and wage/operating obligations still occur. Unmet demand on closed days is estimated at the configured reference price.</p>
+        <p>Realized sales are limited by stock, then unsold stock spoils. Sold and wasted units use FIFO acquisition costs. The realized FIFO economic result deducts wages and operating costs due, even when unpaid. Cash pays wage arrears first, then operating arrears. Reserve is earmarked within total cash, is available to cover those obligations, and is not an expense or additional money. New reserve allocations require positive realized result, available cash and no arrears.</p>
+        <p>The optimized policy enumerates at most 729 price combinations per day. It uses the existing expected worker-surplus objective with replacement costs and forecast reserve contribution. The later surplus-target and essential-basket stages remain outside this simulator.</p>
+      </details>
+      <details id="json-editor"><summary>Edit configuration as JSON (optional)</summary><p>The controls above expose every setting. Loading JSON updates those controls.</p><textarea id="config-json" rows="14" spellcheck="false" aria-label="Configuration JSON"></textarea><div class="actions"><button type="button" id="refresh-json">Copy controls into editor</button><button type="button" id="load-json">Load editor into controls</button></div></details>
+    </section>
+    <section id="results" aria-labelledby="results-heading">
+      <h2 id="results-heading">Results</h2>
+      <p id="result-note">No simulation has been run.</p>
+      <div id="summary" class="table-scroll"></div>
+      <div id="charts" class="charts"></div>
+    </section>
+    <section id="daily-ledger" aria-labelledby="ledger-heading">
+      <h2 id="ledger-heading">Daily ledger</h2>
+      <p>Each row is one policy on one day. Select its day to inspect product flows and the complete returned record. Money columns are cents.</p>
+      <div class="table-scroll" id="ledger"><p>No daily records yet.</p></div>
+    </section>
+    <section id="day-detail" aria-labelledby="detail-heading">
+      <h2 id="detail-heading">Day detail</h2>
+      <label for="selected-day">Day <select id="selected-day" disabled><option>No results</option></select></label>
+      <div id="product-detail"><p>No day selected.</p></div>
+    </section>
+    <details id="result-json"><summary>Complete result JSON</summary><pre id="raw-result">No result.</pre></details>
+    <details id="licenses"><summary>Licenses and component boundaries</summary><div id="license-text">__LICENSES__</div></details>
+  </main>
+  <footer><p>This file runs locally. Configuration and results stay in this page until you export them. Reloading the file clears unsaved work.</p></footer>
+  <script id="wasm-runtime" type="text/plain">__RUNTIME__</script>
+  <script>__APP__</script>
+</body>
+</html>

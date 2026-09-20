@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT
+# Selected CPU toolchain pins copied from the existing TFT dependency lock.
+binutils-common=2.40-2
+binutils-x86-64-linux-gnu=2.40-2
+binutils=2.40-2
+build-essential=12.9
+ca-certificates=20250419~deb12u1
+cmake-data=3.25.1-1
+cmake=3.25.1-1
+cpp-12=12.2.0-14+deb12u1
+cpp=4:12.2.0-3
+dpkg-dev=1.21.23
+g++-12=12.2.0-14+deb12u1
+g++=4:12.2.0-3
+gcc-12=12.2.0-14+deb12u1
+gcc=4:12.2.0-3
+libasan8=12.2.0-14+deb12u1
+libatomic1=12.2.0-14+deb12u1
+libbinutils=2.40-2
+libc-dev-bin=2.36-9+deb12u14
+libc6-dev=2.36-9+deb12u14
+libcc1-0=12.2.0-14+deb12u1
+libctf-nobfd0=2.40-2
+libctf0=2.40-2
+libdpkg-perl=1.21.23
+libgcc-12-dev=12.2.0-14+deb12u1
+libgomp1=12.2.0-14+deb12u1
+libgprofng0=2.40-2
+libitm1=12.2.0-14+deb12u1
+liblsan0=12.2.0-14+deb12u1
+libquadmath0=12.2.0-14+deb12u1
+libstdc++-12-dev=12.2.0-14+deb12u1
+libtsan2=12.2.0-14+deb12u1
+libubsan1=12.2.0-14+deb12u1
+linux-libc-dev=6.1.187-1
+make=4.3-4.1
