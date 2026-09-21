@@ -5,6 +5,7 @@ import base64
 import hashlib
 import html
 import io
+import json
 import pathlib
 import re
 import sys
@@ -12,6 +13,9 @@ import zipfile
 
 project = pathlib.Path(__file__).resolve().parent
 root = project.parent.parent
+empty_history = project / "records/empty-history.json"
+if json.loads(empty_history.read_text(encoding="utf-8")) != {"schema_version": "exchange.history.v1", "observations": []}:
+    raise SystemExit("The packaged cold-start history must remain empty; use a separate file for observations")
 runtime_path = pathlib.Path(sys.argv[1]).resolve()
 sdk = pathlib.Path(sys.argv[2]).resolve()
 runtime = runtime_path.read_text(encoding="utf-8")
@@ -21,6 +25,7 @@ if not embedded or not base64.b64decode(embedded.group(1), validate=True).starts
 
 notices = [
     ("Repository and independent exchange application (MIT)", root / "LICENSE"),
+    ("Simple exponential smoothing (EWMA, MIT)", root / "tools/exponential-smoothing/LICENSE"),
     ("Pricing core and bounded solver (Worker Protection License)", root / "tools/price-optimization/LICENSE"),
     ("nlohmann/json (MIT)", root / "tools/price-optimization/third_party/nlohmann/LICENSE.MIT"),
     ("Emscripten runtime", sdk / "upstream/emscripten/LICENSE"),
@@ -35,10 +40,15 @@ notice_text = [(title, path.read_text(encoding="utf-8")) for title, path in noti
 archive = io.BytesIO()
 with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
     files = [root / "LICENSE", root / "docs/licensing.md", root / "docs/third-party-notices.md",
-             root / "docs/exchange-simulation-verification.md"]
-    files += [p for p in project.rglob("*") if p.is_file() and "dist" not in p.relative_to(project).parts
-              and "__pycache__" not in p.parts]
+             root / "docs/exchange-simulation-verification.md", root / "docs/post-profit-economics.md",
+             root / "docs/adversarial-cooperation.md", root / "docs/reorganization.md",
+             root / "docs/research-plan.md", root / "projects/post-profit-assurance/README.md",
+             root / "projects/post-profit-assurance/CONTRACT.md"]
+    files += [p for p in project.rglob("*") if p.is_file() and not {"dist", "runs", "__pycache__"}.intersection(p.relative_to(project).parts)
+              and ("records" not in p.relative_to(project).parts or p in {empty_history, project / "records/sample-history.json", project / "records/README.md"})
+              and ("configs" not in p.relative_to(project).parts or p == project / "configs/exchange.cfg")]
     files += [p for p in (root / "tools/price-optimization").rglob("*") if p.is_file()]
+    files += [p for p in (root / "tools/exponential-smoothing").rglob("*") if p.is_file() and "__pycache__" not in p.parts]
     for path in sorted(set(files)):
         info = zipfile.ZipInfo(path.relative_to(root).as_posix(), (2026, 9, 20, 0, 0, 0))
         info.compress_type = zipfile.ZIP_DEFLATED

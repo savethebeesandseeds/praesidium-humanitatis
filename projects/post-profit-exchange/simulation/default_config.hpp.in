@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: MIT
+// Generated from configs/exchange.cfg; runtime file runs use their supplied .cfg.
+#pragma once
+inline constexpr const char* kExampleRunConfiguration = R"PHXCFG(@PH_EXCHANGE_DEFAULTS@)PHXCFG";

@@ -1,308 +1,355 @@
 <!-- SPDX-License-Identifier: MIT -->
-# post-profit-exchange: store operations, policy, objective, costs and evidence
+# post-profit-exchange: store operations, feedback, accounts and evidence
 
-Status: proposed application specification, 2026-09-20. This document defines
-the next simulator and application; it does not change the implemented engine
-or authorize live price publication. Application material is MIT. Calling the
-[optimization engine](../../tools/price-optimization/README.md) remains subject
-to its separate license and the applicable AMPL/solver terms.
+Status: research specification, 2026-09-21. The bounded C++/WebAssembly simulator
+implements the daily accounting and feedback rules below under `exchange.sim.v3`.
+Its [contract](simulation/CONTRACT.md) is the detailed input/output reference.
+Governance, live store interfaces and publication remain application requirements,
+not implemented capabilities. Application material is MIT; the
+[pricing engine](../../tools/price-optimization/README.md) retains its separate
+license. The AMPL server backend also requires applicable vendor rights.
 
-Implementation note: the [standalone WebAssembly simulator](README.md#standalone-webassembly-simulation)
-now exercises a bounded subset: synthetic daily procurement, sales, FIFO accounts,
-cash, reserves and the existing expected-surplus pricing objective. Its
-[contract](simulation/CONTRACT.md) identifies implemented rules and limits. The
-broader requirements and sequential objective below remain a research specification.
+The [adversarial-cooperation research note](../../docs/adversarial-cooperation.md)
+acknowledges potential disruption to incumbent owners' income and control and
+records the intention to address their interests alongside the potential benefit
+of foregoing passive-owner extraction. That protocol is future research.
 
-The [research framing and adversarial-cooperation note](../../docs/adversarial-cooperation.md)
-acknowledges the model's disruptive potential and records our intention to
-construct a protocol addressing incumbent owners' interests alongside the
-potential advantage of foregoing passive-owner profit extraction. This is a
-future research track; it is not implemented by this specification or engine.
+## Purpose and scope
 
-## Purpose and values
+This **exchange** demonstration belongs to the
+[post-profit economics program](../../docs/post-profit-economics.md). The store
+also models distribution through procurement and stock, and allocation through
+inventory and operating budgets. Its purpose is accessible goods, protected
+work and operational continuity, with decisions and surplus under worker control.
+There is no passive owner entitled to extract profit or direct the workers.
+Software itself cannot establish worker consent or an ownerless legal entity.
 
-This specification formalizes a proposed **exchange** demonstration within
-Praesidium Humanitatis's [post-profit economics program](../../docs/post-profit-economics.md).
-The store studies exchange through its public-price mechanism, **distribution**
-through stock and procurement, and
-**allocation** through inventory access, protected budgets and worker-controlled
-surplus. Its research question is whether these arrangements can sustain
-accessible goods, decent work and continuity under declared operating conditions.
+The store encompasses procurement, stock, sales, wages and operating obligations,
+cash, inventory value and reserves. Prices are one decision within that operation.
+Salaries are fixed, protected inputs; the optimizer neither selects nor reduces
+them. Factory and laboratory operations belong in separate applications.
 
-Operate a store that sustains decent work, makes useful goods
-accessible, and retains its surplus under worker control. Automation serves
-the workers; it receives no independent authority over them. No passive owner
-receives a share of the surplus or controls the optimization policy.
+Self-sufficiency must be evaluated over a declared horizon, including resource
+endowments, missed obligations, inventory and liquidity. One feasible price
+decision or positive forecast is insufficient evidence. The current simulator
+has explicit opening cash and stock, no new borrowing or outside funding, and
+no matched passive-owner-return model. Its fixed-price comparison does not prove
+an advantage from removing owner extraction.
 
-The application encompasses stock, procurement, sales, economic and cash
-accounts, compensation and continuity. Real-time pricing is its first optimized
-decision: policy defines the feasible choices, costs and demand describe their
-consequences, and the objective selects prices within those constraints. Prices
-are an output of this formulation, not the purpose or full scope of the project.
-This is an intended operating model; the current tool returns synthetic price
-recommendations and does not implement the store's operational workflows.
+## Policy and authority
 
-Factory and laboratory operating models belong in separate application folders.
-This specification is scoped to `post-profit-exchange`; shared numerical capabilities
-remain in separately licensed tools.
+The implemented price model uses one public price per SKU, fixed wages and
+operating costs, a new reserve funding requirement, affordability ceilings,
+per-update price-change limits, scenario inventory bounds and feedback rules.
+These constrain optimizer recommendations. A policy identifier in the engine request is only
+an audit label; the current code does not authenticate approval.
 
-Self-sufficiency means covering recurring obligations and maintaining inventory,
-equipment and liquidity over a declared evaluation horizon. A profitable price
-recommendation is not evidence of this. Startup capital, debt and subsidies
-must be visible; continuing dependence on new funding must be reported.
+For a live deployment, workers must approve versioned policy, retain recall and
+suspension authority, and control realized surplus after obligations. Approval
+records need scope, currency, effective and expiry times, evidence of authority
+and a revocation mechanism. Live publication must revalidate current state and
+authority, including after a solve has started. An old price is not automatically
+safe when costs, inventory or policy change.
 
-The design has six separate parts:
-
-| Part | Question it answers |
-| --- | --- |
-| Policy | What is permitted, required or forbidden? |
-| Objective | Which permitted outcome should we prefer? |
-| Costs and accounts | What resources and obligations does operating the store consume? |
-| State and evidence | What do we know, how recent is it, and what is uncertain? |
-| Authority and actions | Who may approve a change, and what may the software execute? |
-| Evaluation | Did workers, customers and the productive unit actually benefit? |
-
-## Policy: conditions that cannot be traded away
-
-Each policy version has an identifier, content digest, scope, currency,
-effective/expiry times, approving workers or authorized delegates, approval
-evidence, and a revocation mechanism. It declares its planning horizon,
-accounting period, refresh cadence and solve deadline separately. The
-application authenticates these records before calling the engine.
-
-Workers choose the rules through collective governance. Routine authority may
-be delegated with explicit limits and recall. Neither a majority vote nor an
-optimizer setting authorizes uses prohibited by the engine's license. Worker
-approval is necessary but cannot alone establish that a policy is fair to
-customers; provide an accessible complaint and correction process as well.
-
-| Policy area | Required rule | Enforcement boundary |
+| Area | Required operating protection | Current boundary |
 | --- | --- | --- |
-| Worker dignity | Work is voluntary. No coercion, retaliation, individual productivity scoring or surveillance-based pricing. | Organization and data-access controls; software cannot prove consent. |
-| Compensation and workload | Approved pay and employer obligations are protected costs. Pricing cannot cut pay, remove benefits or silently demand more labor. Staffing and safety limits are fixed inputs to this first application. | Policy approval and accounts; the pricing solver has no employment action. |
-| Public prices | One posted price per SKU and applicable period, with consistent checkout treatment. No personal willingness-to-pay or distress scoring. | Input contract, solver and publication service. |
-| Affordability | Per-SKU ceilings and a defined essential basket; any basket ceiling is a hard constraint. Protect essentials during shocks with explicit emergency rules. | Solver plus independent validation; the ceilings need real-world evidence and periodic review. |
-| Price stability | Bound price changes and their frequency. Measure limits against retained reference prices over specified rolling windows, so repeated small updates cannot evade a daily cap. | Historical state and publication controls. |
-| Essential access | Define service targets, shortage reporting and fair manual contingency procedures. Do not conceal stockouts by reducing the demand forecast. | Simulator, inventory operations and worker review. |
-| Financial continuity | Cover protected obligations, maintain a minimum usable cash balance and specified reserve balances, and honor payment dates under the approved stress scenarios. | Economic and cash ledgers plus scenario checks. |
-| Surplus | Workers approve its use. No passive-owner distribution, disguised extraction through related-party charges, or automatic transfer of forecast surplus. | Governance, cost review and payment permissions. |
-| Evidence and privacy | Use versioned, sufficiently fresh inventory, costs and aggregate demand evidence. Retain only necessary audit data with an approved retention period. | Data pipeline and access controls. |
-| Human control | Workers can suspend automation, revoke policy, inspect recommendations and appeal decisions. Overrides are recorded and still checked against non-negotiable protections. | Application authorization and operating procedures. |
+| Worker dignity | Voluntary work, no coercion, retaliation or individual surveillance scoring. | Organizational governance and access controls remain necessary. |
+| Compensation | Fixed approved wages and employer obligations; no reduction of pay or covert increase of workload to improve a score. | Daily wages are fixed inputs; staffing and benefits workflows are not modeled. |
+| Public prices | Consistent posted prices without identity, distress or willingness-to-pay profiling. | Engine selects one price per SKU; checkout/publication is outside the simulator. |
+| Affordability | Worker-approved per-SKU ceilings supported by evidence and customer complaint/correction processes. | Candidate ceilings are enforced; actual accessibility needs evaluation. |
+| Price stability | Limits on change and frequency with suitable historical references. | Current cap is per update, not a rolling multiday limit. |
+| Continuity | Explicit obligations, reserves, arrears, liquidity and fair shortage procedures. | Daily accounts expose shortages; forecasts do not guarantee future cash. |
+| Surplus | Worker authority over realized surplus; no passive-owner extraction or disguised related-party extraction. | No distributions or external payments are executed. |
+| Evidence | Fresh, versioned inventory, costs and aggregate demand with appropriate retention. | Synthetic inputs are inspectable; operational data pipelines remain future work. |
 
-All financial obligations use the same declared horizon and currency. A
-one-minute pricing refresh does not create a new monthly wage or reserve bill:
-reconcile obligations already paid or funded and model the remaining period.
-Accounting-period boundaries must not reset rolling price protections.
+All obligations belong to one stated currency and accounting horizon. Repeated
+price refreshes must not create another salary bill or restart an already funded
+reserve target. An infeasible or invalid decision produces no optimizer
+recommendation. The explicitly declared continuity rule below handles financial
+infeasibility separately from technical model failure. Explanations must
+distinguish local candidate exclusions from a proven
+global infeasibility cause; the engine does not provide the latter.
 
-No feasible decision means no automatic publication. Report the conflicting
-constraints and the evidence used. Route operation to the approved worker-led
-contingency procedure. Do not silently reduce wages, raise affordability caps,
-invent demand or spend unavailable reserves. An old price may be retained only
-if it remains valid under current policy and state.
+## Price feedback from actual operating results
 
-## Objective: shared benefit within policy
+Good actual sales that leave the store ahead of required funding permit prices
+to fall. A realized funding gap permits prices to rise when the demand model
+shows that an increase will preserve contribution. The controller aims to bring
+funding toward balance. It does not maximize expected surplus, minimize a static
+basket price, or run a sequence of surplus-target and basket objectives.
 
-The proposed store default uses sequential optimization. Complete each stage,
-then preserve its optimum, within an explicit policy-approved tolerance,
-before solving the next. Do not collapse dignity, affordability and income
-into an unexplained weighted score.
+Let raw history `B` start at zero and accumulate the actual FIFO economic result
+minus newly scheduled reserve funding. Positive means ahead of required funding;
+negative means a shortfall. Opening cash, inventory and endowed reserves do not
+count as earnings. For the configured `feedback_recovery_days` horizon, derive
+the next signed adjustment `b` by rounding `B / feedback_recovery_days` to cents,
+preserving any nonzero sign with a minimum magnitude of one cent. Default is
+three days, with a supported range of one through thirty. This changes the
+response horizon without resetting the actual history.
 
-1. **Require policy feasibility.** Hard protections are constraints, not penalties
-   that sufficient revenue can outweigh.
-2. **Reduce shortfall against a worker-approved discretionary surplus target.**
-   Guaranteed compensation is already protected; this target is additional
-   worker benefit and may remain unmet without making a valid plan dishonest.
-3. **Reduce the public price of a fixed essential basket.** Once the best
-   attainable target performance is preserved, prefer greater customer access.
-4. **Reduce avoidable waste**, then **unnecessary price changes**, using declared
-   measures and the same preservation rule for earlier stages.
-5. **Prefer additional worker-retained surplus** when the preceding outcomes
-   are equivalent. Use a deterministic final tie-break for reproducibility.
-
-For scenario `s`, let `A_s` be the full accounting period's projected economic
-surplus after protected costs and required allocations: reconciled results
-already earned plus the forecast for the remaining period. Let `T >= 0` be
-the approved discretionary surplus target for that same full period, and
-`rho_s` the scenario probability. Stage 2 is:
+For scenario `s`, candidate public prices and supplied quantities yield:
 
 ```text
-shortfall_s = max(0, T - A_s)
-minimize sum_s rho_s * shortfall_s
+m_s = forecast_sales_contribution_s - fixed_wages - fixed_operations
+      - new_reserve_requirement
+g_s = b + m_s
+minimize sum_s probability_s * abs(g_s)
+subject to m_s + C + L >= 0, for every scenario
 ```
 
-Already earned worker surplus counts toward target achievement even if workers
-have received its distribution; that payment reduces cash, not earned progress.
-Alternatively an implementation may use a remaining target and remaining
-result, but it must reconcile progress exactly once. Never pair a full-period
-target with only remaining-period earnings or restart the target at each
-pricing refresh.
+`C` is separately established, cash-backed earned funding available for coverage.
+Let liquid cash be cash after procurement less existing wage/operating arrears,
+bounded below by zero. `C` is zero unless `b > 0`; otherwise it is the smaller
+of positive raw history and liquid cash less existing reserve, bounded below by
+zero. `L` is the remaining liquid cash after subtracting `C`. This disjoint
+liquidity buffer can include endowed cash and reserves available for obligations;
+it supports continuity without being recorded as earned funding. `C` can exceed
+the amortized adjustment because control response and liquid earned funding
+have different roles. Neither credit nor buffer replaces `b` in the objective.
+The engine validates bounds and requires zero credit when `b <= 0`; the caller
+establishes the accounting and liquidity evidence.
 
-This measures shortfall within scenarios: a large upside in one scenario does
-not erase a shortfall in another. Report expected shortfall and the worst
-scenario separately. Probabilities and supplied scenarios are assumptions,
-not guarantees about every possible future. If the target cannot be met,
-report that result and continue only with hard protections intact.
+Every SKU also obeys these hard rules:
 
-For fixed policy basket quantities `b_i`, stage 3 minimizes:
+- `b > 0`: decrease or hold the previous price.
+- `b < 0`: increase or hold. An increase is eligible only when its forecast
+  contribution `(price - replacement_unit_cost) * forecast_units` is at least
+  the hold candidate's contribution in every supplied scenario.
+- `b == 0`: hold. Day one therefore uses the configured reference prices to
+  collect actual operating evidence.
+
+The candidate grid must contain the previous price and its scenario forecasts.
+Affordability, price-change and inventory constraints still apply. They can block
+useful movement or any feasible trade. Holding can be the best feasible balance;
+a funding gap is not a promise that increasing prices can recover it. Reductions
+also depend on feasible coverage and inventory. The objective cannot assume
+demand that the supplied scenarios do not support.
+
+Expected absolute balance differs from the absolute value of expected balance:
+opposite scenario deviations cannot cancel. Report signed scenario balances,
+the absolute score, coverage slack and realized history separately. Expected
+worker surplus remains a diagnostic, not the optimization objective. The model
+does not guarantee a deterministic tie choice across solver builds.
+
+The server contract is `ph.price.v3`, engine `0.4.0`, model `public-prices.v3`,
+with objective `{id: "operating_balance_tracking", version: 1}`. Its required
+`feedback` object carries `funding_balance: b`, `coverage_credit: C` and `liquidity_buffer: L`.
+`recommendation.expected.absolute_funding_balance` is the minimized score;
+each scenario's `funding_balance` is `b + m_s` and coverage slack is `m_s + C + L`.
+The browser uses the same C++ selection checks and an explicitly selected bounded
+enumeration backend, with a configured ceiling of at most 200,000 price combinations.
+A combination grid beyond that ceiling is a model error, not a partially searched
+optimum. AMPL does not run in
+the standalone HTML.
+
+## Reserve funding and cash earmarking
+
+Reserve funding requirements and the reserve cash account are separate. Each
+day, forecasts from prior observations at currently posted prices estimate
+expected contribution and an adverse error amount. Let `F` be fixed daily wages
+plus operations, `m_i` current replacement-cost margins, `mu_i` forecast units,
+`sigma_i` their one-step RMS errors, `H` the reserve horizon and `z` the configured
+sigma multiplier. The dynamic target is:
 
 ```text
-basket_price = sum_i b_i * public_price_i
+target = max(configured_reserve_target,
+    ceil(H * max(0, F - sum(m_i * mu_i))
+         + z * H * sum(abs(m_i) * sigma_i)))
 ```
 
-Basket quantities are independent of predicted sales and remain fixed during
-the solve. Otherwise, suppressing essential purchases could misleadingly
-improve the affordability score. Prices used for this basket must reflect the
-amount customers actually pay. Basket availability is measured separately;
-cheap unavailable goods are not access.
+For this calculation, means are capped by the smaller of the physical customer
+unit maximum and `max(current_stock, target_stock)`; sigma is capped by the
+physical maximum. The stock target is a supply heuristic, not proof that the
+store can finance every replenishment. The error aggregation assumes common
+adversity across products and days, without diversification. It is a conditional
+stress target, not an absolute worst-case guarantee or a calibrated insurance
+probability. [Model notes](docs/MODELS.md) distinguish it from the forecaster's
+uncorrelated-innovation horizon calculation.
 
-Targets, basket contents, stage priorities and tolerances are public policy
-choices, versioned and reviewable. Setting a very high surplus target can make
-affordability improvement unreachable; show that tradeoff in simulation before
-workers approve it. Waste measures must specify comparable units or actual
-disposal/write-off costs. Price-change measures must declare their reference
-window and scale. Never invent exchange rates between rights and money.
-
-**Implemented engine behavior differs:** it currently maximizes expected worker
-surplus after unit costs, fixed pay, operations and a reserve contribution,
-subject to per-product affordability/change limits and coverage in every
-supplied scenario. It has no surplus target, basket objective, waste model,
-cash ledger or sequential objective stages. The proposed objective needs an
-explicit AMPL/API change and new verification before the application can use it.
-
-## Costs: complete, explicit and counted once
-
-Keep an economic-result ledger and a cash ledger. Each cost has a category,
-source, amount/currency, unit or period basis, recognition period, payment date,
-uncertainty and approval record. Mark estimates as estimates. Changing a cost
-classification cannot create surplus or remove an obligation.
-
-| Category | Economic treatment | Cash treatment |
-| --- | --- | --- |
-| Merchandise | Landed cost of units sold; retain unsold inventory in the inventory ledger. | Supplier payments follow their actual due dates. |
-| Waste and shrinkage | Record losses of stock once, plus distinct disposal costs. Never count the same unit as both sold and spoiled. | Inventory may have been paid for earlier; disposal may create a new payment. |
-| Transaction costs | Payment processing, packaging and delivery attributable to sales. Model price-dependent fees explicitly. | Settlement deductions and invoices follow the relevant timing. |
-| Worker compensation | Approved wages, benefits, paid leave and employer obligations. Guaranteed pay is not contingent on surplus. | Track payroll and other payment dates, including arrears. |
-| Operations | Energy, occupancy, insurance, maintenance, software, accounting and other approved services, assigned to the proper period. | Bills may be paid before or after the expense is recognized. |
-| Equipment | Recognize use/depreciation under the chosen accounting policy. Repairs and improvements need explicit classification. | Equipment purchases consume cash when paid. |
-| Financing | Approved interest and financing fees are distinct from distributions to owners. | Principal repayment consumes cash but is not another operating expense. New borrowing is funding, not sales revenue. |
-| Taxes and pass-through amounts | Separate amounts collected for others, recoverable amounts and actual store expenses. Treatment is deployment-specific configuration. | Record collection, recovery and remittance dates separately. |
-| Reserves and reinvestment | Earmarking surplus is an allocation, not an additional expense. Recognize actual resulting expenses or assets separately. | Transfers between the store's own accounts do not reduce total cash; they change what is available to spend. |
-| Worker surplus distributions | Allocation of realized distributable surplus after obligations; separate from protected compensation. | Pay only after reconciliation and liquidity checks, under worker authority. |
-
-A purchase's freight cost, for example, belongs either in landed unit cost or
-in a separate expense, never both. Document the inventory valuation basis and
-show replacement-cost forecasts separately from recorded cost. Do not mix
-customer tax-inclusive prices with tax-exclusive margins without a defined
-conversion and reconciliation.
-
-An economic view for each period/scenario is:
+The simulator schedules new funding toward that target above endowed reserve:
 
 ```text
-net_revenue = sales excluding pass-through collections
-economic_result = net_revenue
-                  - cost_of_goods_sold - stock_losses - transaction_costs
-                  - protected_worker_compensation - operating_expenses
-                  - depreciation - financing_expenses - applicable_tax_expense
-A = economic_result - required_reserve_contribution
-                    - other_committed_surplus_allocations
+new_reserve_requirement = min(reserve_contribution,
+    max(0, target - initial_reserve - cumulative_scheduled_requirement))
+B_next = B + actual_FIFO_economic_result - new_reserve_requirement
 ```
 
-The allocations in `A` must not duplicate costs already recognized. Their
-amounts come from a reconciled funding plan; if planned equipment spending is
-already funded, the optimizer must not fund it again on every refresh.
+Scheduling the requirement records what operating results must fund; it does
+not assert that the funds have been earned or placed in reserve. A shortfall
+remains in `B`. A rising target can schedule additional funding; a falling target
+does not erase earlier requirements or invent a refund. Releasing reserve to pay obligations or later re-earmarking cash
+does not restart the schedule, create earnings or change `B`. An operating loss
+already entered in history must not be charged again as a new reserve target.
 
-The cash view is separate:
+Actual reserve is a subset of total cash. After obligations, if no arrears remain,
+the daily allocation is limited by the configured contribution, remaining actual
+target and cash not already reserved. This may restore an earmark using earlier
+funding even when today's economic result is zero. Earmarking opening cash does
+not turn an endowment into earned feedback. Transfers change available cash,
+not total cash or economic result.
+
+## Daily operations and accounts
+
+The simulator runs one pricing update per day, using integer minor currency
+units and whole product units. The full bounds and rounding rules are in the
+[simulator contract](simulation/CONTRACT.md).
+
+1. Observe the day's replacement costs and calculate forecasts from prior
+   eligible sales. The configured demand shock changes actual arrivals and is
+   not supplied to the forecaster in advance. Recalculate the reserve stress target.
+2. Replenish toward target stock in configured product order, protecting reserve,
+   existing arrears and today's wages/operations. Cash and daily purchase budget
+   limit spending; deliveries are immediate. Procurement is a rule, not an
+   optimized variable, and happens before price selection.
+3. Schedule new reserve funding and solve using stock, replacement costs, fixed
+   obligations, three demand scenarios and actual-history feedback. The fixed
+   comparator holds its literal configured prices, with its own forecast/history
+   and coverage calculation.
+4. Use a recommended price or, on financial infeasibility, retain the existing
+   valid public price under the declared continuity policy. Generate visiting
+   consumers, needs and purchase choices; sell only budget-affordable units in
+   stock. A technical model error rolls back that day's procurement/scheduled
+   funding and ends the path, without a simulated trading day.
+5. Spoil remaining stock at the configured rate. Value sold and spoiled units
+   using FIFO inventory lots, and accrue wages and operating costs once.
+6. Pay wage arrears first and operating arrears second, releasing reserve if
+   needed. Unpaid amounts remain liabilities; cash never goes negative and no
+   debt is invented.
+7. Score forecasts before learning from the day's uncensored sales. Update raw
+   funding history, re-earmark reserve when possible and reconcile accounts.
+   Record assurance requests and stop the path if cash is exhausted or fixed
+   obligations remain unpaid.
+
+Opening stock is a separate endowment valued at the unshocked unit cost; it is
+not purchased again from opening cash. Purchases reduce cash and add inventory.
+Expense recognition occurs when goods are sold or spoiled. Paying an old arrear
+settles its liability without recognizing the expense again.
 
 ```text
-closing_cash = opening_cash + customer_receipts + approved_funding_inflows
-               - supplier_payments - payroll_payments - operating_payments
-               - tax_remittances - interest_and_fee_payments
-               - debt_principal_payments - capital_purchases
-               - worker_distributions
+actual_contribution = revenue - FIFO_cost_of_goods_sold - FIFO_waste_cost
+economic_result = actual_contribution - newly_due_wages - newly_due_operations
+actual_required = newly_due_wages + newly_due_operations + new_reserve_requirement
+actual_funding_result = actual_contribution - actual_required
+closing_cash = opening_cash - procurement + revenue - wages_paid - operations_paid
+closing_stock = opening_stock + purchases - sales - spoilage
+closing_inventory_value = opening_inventory_value + purchase_cost
+                          - cost_of_goods_sold - waste_cost
+cash + inventory_value - wage_arrears - operating_arrears
+    = initial_cash + initial_inventory_value + cumulative_economic_result
 ```
 
-Cash categories must be disjoint; add other receipts/refunds explicitly when
-applicable. Reconcile gross receipts and payment fees consistently. Check
-usable cash against the required floor at each payment date, not just at the
-end of the horizon. Profit can coexist with a cash shortage. Forecast surplus
-is not authorization to pay a bonus or make a purchase.
+Forecasts value contribution at current replacement costs; realized accounts use
+FIFO historical costs. A cost shock can therefore produce different signs in
+forecast surplus and realized economic result even without demand error. Display
+both cost bases, not a single interchangeable profit measure.
 
-In the current API, `unit_cost` is a constant per unit, `worker_wage_floor` and
-`operating_cost` are fixed horizon amounts, and `reserve_floor` is a **new
-contribution for that horizon**, not the balance of a reserve account. The
-prototype's reported surplus is a contribution-based forecast, not a complete
-accounting profit or cash balance. Do not claim the richer ledger above is
-already implemented or hide unsupported costs in misleading inputs.
+The research ledger includes merchandise, spoilage, fixed wages, fixed operations,
+reserve earmarking and arrears. A live application additionally needs explicit
+tax, payment-fee, benefits, depreciation, financing, supplier-due-date and worker
+distribution treatment where applicable. These are not independently implemented
+ledger categories today. Amounts must be classified once, with source, currency,
+recognition period and payment timing; avoid disguising unsupported obligations
+inside an unrelated field. Forecast feasibility is not a full liquidity plan.
 
-## State, decisions and evidence
+## Forecasts, consumers and comparison
 
-The first application controls proposed public prices. Replenishment,
-scheduling, employment, lending, transfers and distributions require separate
-authority and are outside that action set. Simulating those events grants no
-permission to execute them.
+The standalone consumer module uses arrival, budget, need and binary-logit
+purchase/no-purchase gates. It exposes budget rejections and stock-lost units.
+Its reference demand and utility slopes are declared cold-start priors, not
+measurements of real customers. Configured SKU order allocates budget first to
+earlier products; there is no persistent household, substitution or joint-basket
+choice model.
 
-Every decision record should connect the policy version, inventory/cost/ledger
-snapshots, forecast version, scenario assumptions, engine/model versions,
-selected prices, objective-stage results, binding constraints, validation
-results, approval, expiry and any later publication identifier.
+Each SKU has an EWMA level of price-normalized sales and a smoothed one-step
+squared-error estimate. Only prior, open, uncensored sales update the model.
+Predictions are scored before updating; sellouts and zero-stock observations are
+excluded. Warmup, MAE, RMSE and configured-band coverage remain visible, including
+the selection bias from excluding stockouts. `z` sigma is an adversity assumption,
+not a claimed coverage probability. Imported negative-day observations train
+forecasts without altering opening resources or earned funding. No TFT is
+silently trained or invoked.
 
-Demand evidence must distinguish latent demand, fulfilled sales and stockouts.
-A time-series forecast alone does not establish response to changing prices.
-The simulator must model price response, substitution, delayed deliveries,
-perishability and uncertainty separately from the planner's beliefs, with
-held-out or deliberately adverse scenarios. Replaying the exact forecasts
-used to optimize is only a consistency check.
+Three scenario offsets around each forecast mean use configured sigma stress
+and probability weights. The application exposes demand before stock limits,
+capped by physical visitor/unit capacity, separately from saleable scenario units
+capped to available inventory. The engine receives the saleable units and checks
+them; it does not invent latent demand or decide replenishment. Realized unmet
+demand remains visible independently.
 
-The current engine rejects a candidate when its supplied demand exceeds stock
-in any scenario. It does not clip demand to inventory or optimize lost sales.
-The future simulator should track unmet demand explicitly; changing the engine
-to choose sales quantities or replenishment is a separate model extension.
+Both policies start with identical resources and use matching random keys for
+day, customer, SKU and event. They realize purchases at their own prices and
+stock, then learn from their own resulting sales. Future demand shocks and
+future actual choices are unavailable to forecasts. The comparison therefore
+does not replay identical sales across different policies; their forecasts,
+cash, procurement, inventory and terminal dates can diverge.
 
-## Additional values and operational features
+## Continuity, assurance and terminal outcomes
 
-- **Resilience:** stress demand drops, cost increases, supplier delays and
-  equipment failures. Report reserve runway, missed obligations and dependence
-  on external funding; do not describe one successful solve as self-sufficiency.
-- **Worker benefit:** measure whether pay was delivered on time, workloads
-  stayed within policy, workers exercised control, and realized surplus was
-  allocated as approved. No individual surveillance scores.
-- **Customer access:** measure essential-basket price against the approved
-  reference, availability, unfulfilled essential demand and complaint outcomes.
-- **Environmental care:** report spoilage, disposal and measurable resource use.
-  A worker-approved environmental limit is a constraint; an unvalidated impact
-  estimate is evidence to improve, not a claim of proven benefit.
-- **Supplier fairness:** expose overdue payments and related-party charges.
-  Store viability must not be manufactured by silently shifting costs or
-  payment risk onto workers or suppliers.
-- **Explainability:** show the protected budgets, binding limits, remaining
-  target shortfall and why alternatives were rejected. A useful infeasibility
-  explanation is not permission to relax the conflicting protection.
-- **Reliable execution:** enforce solve deadlines, independent checks, current
-  state/policy revalidation, atomic publication, idempotency and checkout
-  reconciliation. Worker suspension must prevent an already-running solve from
-  publishing after authority has been revoked.
+Temporary projected losses can use a disclosed cash buffer. If pricing remains
+financially infeasible, the research continuity rule retains the current public
+prices and records that forecast coverage was not certified. It does not call
+that result an optimizer recommendation. Technical invalid/unavailable/failed
+solves are separate model errors and do not trigger this continuation.
 
-## Acceptance criteria for the simulator
+The application emits `exchange.assurance.v1` events addressed by contract name
+to **Post-Profit Continuity Assurance**. Coverage failure, a configured fixed-cost
+cash-buffer breach or exhausted cash can trigger `assurance_requested`. Each
+event records the reason, requested support, cash, reserve, inventory value,
+arrears, funding history and forecast evidence. Settlement is explicitly
+`unfunded_request`; the prototype neither contacts a provider nor receives money.
 
-1. Given identical policy, starting state, event stream and random seed, replay
-   produces identical decisions and accounts. Store all required versions.
-2. Every price satisfies hard policy, and each later objective stage preserves
-   earlier stages within declared tolerances. Check small cases by enumeration.
-3. Inventory and cash reconcile across purchases, sales, waste, returns and
-   period boundaries. Refreshing prices does not duplicate obligations.
-4. Simulated outcomes are evaluated against fixed approved prices and the
-   current surplus-maximizing engine with the same exogenous shocks, underlying
-   customer draws and starting resources. Regenerate fulfilled sales for each
-   policy's prices and inventory; do not replay identical realized sales across
-   different prices. Report customer and worker outcomes alongside economic results.
-5. Stress cases include zero demand, stockouts, rapid cost changes, forecast
-   error, negative cash despite positive profit, stale data, solver timeout,
-   policy revocation and an unattainable discretionary surplus target.
-6. A failed or invalid decision cannot reach publication or payments. The
-   initial simulator and shadow mode have no such external action capability.
+Zero opening cash ends the path at day zero. Subsequently, zero cash after fixed
+obligations or remaining wage/operating arrears records `insolvency_declared` and
+ends that policy. No extra days are fabricated. A model-error path terminates
+separately. The comparator may run longer; totals over unequal observed horizons
+must not be presented as an equal-duration treatment effect. This simulated
+insolvency rule is a model condition, not a legal determination.
 
-Numerical targets, essential basket contents, acceptable uncertainty, horizon,
-liquidity floors and governance quorum remain decisions for the actual worker
-group. Synthetic fixture values may exercise the implementation; they are not
-an approved store policy. Build the simulator and reconciled accounts first,
-then implement and verify the proposed objective, before a bounded live pilot.
+## Records and inspectability
+
+The central `.cfg` uses strict JSON and contains all operational settings and
+products. The checked-in example is the source of defaults embedded at build
+time; a supplied `.cfg` is authoritative for a native run. History and output
+paths are explicit. [File records](docs/FILES.md) include the complete request,
+configuration/history snapshots, result, daily records, assurance events and a
+completion manifest. Existing output paths are refused. There is no database.
+
+The standalone interface exposes all inputs, signed accumulated funding with a
+zero target, actual contribution versus requirements, prices, stock, cash,
+reserves, unpaid obligations, waste and unmet demand. Daily and product ledgers,
+scenario scores and movement reasons remain inspectable and exportable. A hold
+reason is explanatory evidence, not proof of global infeasibility.
+
+Live decision records must additionally connect authenticated policy and data
+versions, engine/model versions, selected prices, objective score, constraints,
+approval, expiry and publication identifiers. A supervised server solve has
+deadline and cancellation controls; those do not implement checkout, worker
+authority or atomic publication.
+
+## Evaluation and acceptance criteria
+
+1. Replay identical configuration and seeded draws consistently. Check bounded
+   decisions against independent enumeration and the AMPL formulation where used.
+2. With forecasts unchanged, positive actual funding can lower prices; a realized
+   gap can raise prices only when contribution is preserved in every scenario.
+   Zero history holds. Test cases must also expose blocked recovery and infeasibility.
+3. Keep wages fixed. Do not satisfy a score by reducing compensation, raising a
+   configured affordability cap or inventing liquid coverage credit/buffer.
+4. Reconcile purchases, FIFO sales, spoilage, cash and arrears exactly. Schedule
+   reserve target funding once; releasing/rebuilding the cash earmark must not
+   duplicate an operating loss or treat opening funds as earnings.
+5. Compare feedback with fixed public prices using paired external draws and
+   price-specific sales. Report affordability, access, wages paid, continuity,
+   cash and stock alongside economic result and funding balance.
+6. Stress no visits, no purchases, budget/stock limits, unrevealed demand shocks,
+   observed cost shocks, forecast error, FIFO cost differences and exhausted cash.
+   Distinguish continuity trades from certified recommendations, and technical
+   model errors from insolvency. Assurance requests cannot fabricate funding.
+
+The [verification record](../../docs/exchange-simulation-verification.md) states
+the checks actually performed and their limits. Further research must evaluate
+demand misspecification, delayed supplies, workload, environmental costs and
+customer access. Operational integration needs authenticated governance, real
+accounting/data evidence, worker-controlled suspension and a bounded shadow-mode
+pilot before live prices. Synthetic settings are not approved store policy or
+evidence of self-sufficiency.

@@ -18,19 +18,22 @@ require separate evidence.
 | --- | --- | --- |
 | **Production** | Worker-governed factory and laboratory models. | Select a concrete productive process; define inputs, outputs, work, capacity, governance and continuity before creating a demonstration project. |
 | **Distribution** | Provision, transport and availability of goods; a separate project placeholder. | Define a distribution model, its participants, resources and evidence requirements. |
-| **Exchange** | The `post-profit-exchange` store model, followed by comparison with other mechanisms where appropriate. | Implement stock, procurement, sales and reconciled accounts; formalize the proposed objective stages and settlement workflow, and distinguish supplied scenarios from evidence of response to prices. |
+| **Exchange** | The `post-profit-exchange` store model, followed by comparison with other mechanisms where appropriate. | Evaluate operating-balance feedback against empirical demand response; define settlement workflow and distinguish supplied scenarios from evidence of actual response to prices. |
 | **Allocation** | Store budgets and surplus, and the suffering-mitigation model for limited response resources. | Specify decision rights, priorities, shortage rules and outcome measures for each setting. |
 
 The store now has an initial synthetic C++/WebAssembly simulator and reconciled
-accounts. Its next research work is richer evidence and implementation and
-verification of its proposed objective. Suffering
+accounts and operating-balance feedback. Its next research work is empirical
+evidence of stability, affordability and continuity. Suffering
 mitigation needs a concrete allocation question and feasible response.
 Production models remain a direction to define. The
 [adversarial-cooperation track](adversarial-cooperation.md) examines transition
 and incumbent interests; its protocol remains future work.
 
 Reusable tools support these demonstrations and retain independent technical
-evaluation. Within the forecasting tool, the current priority is to establish
+evaluation. The MIT [simple exponential smoothing baseline](../tools/exponential-smoothing/README.md) now
+supplies the exchange's EWMA core independently of the application. Empty history
+and declared priors are the default; generated sales remain simulation evidence.
+Within the separate Temporal Fusion Transformer tool, the current priority is to establish
 TFT replication before adding query inspection. The meaning and contract of
 query inspection still need definition; integration is not implemented.
 The [replication gate](tft-replication.md) separates correctness of this code,
@@ -108,11 +111,12 @@ protected compensation and operational continuity without passive-owner profit
 extraction. Its [specification](../projects/post-profit-exchange/STORE_SPECIFICATION.md)
 defines the proposed operating model and simulator acceptance criteria.
 
-The standalone simulator implements initial reconciled inventory, economic and
-cash accounts. Extend the operating evidence, then implement the proposed
-surplus-target and affordability objective stages. The existing
-optimizer instead maximizes expected worker-retained surplus within supplied
-protections; its synthetic validation supports only that implemented behavior.
+The standalone simulator implements reconciled inventory, economic and cash
+accounts with feedback from actual funding history. Earned excess calls for
+lower prices; shortfalls call for useful increases. The optimizer minimizes
+absolute projected funding imbalance within supplied protections. Extend the
+operating evidence and investigate stability under empirical demand response;
+synthetic validation supports only the implemented mechanism.
 Track the store's distribution outcomes, terms of exchange and allocation of
 budgets and surplus separately.
 

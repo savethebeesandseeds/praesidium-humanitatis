@@ -11,8 +11,9 @@ by the repository's root `LICENSE`. Dependencies retain their own terms.
 
 | Project | Economic areas and purpose | Reusable tool | Current state |
 | --- | --- | --- | --- |
-| [post-profit-exchange](post-profit-exchange/README.md) | **Exchange**, with **distribution** and **allocation**: investigate a self-sufficient store under worker control, without passive-owner profit extraction | Separately licensed price optimization tool: AMPL backend and explicit bounded offline backend | Standalone C++/WebAssembly simulation, plain charts and reconciled synthetic accounts; live operation remains future work |
+| [post-profit-exchange](post-profit-exchange/README.md) | **Exchange**, with **distribution** and **allocation**: investigate a self-sufficient store under worker control, without passive-owner profit extraction | MIT [simple exponential smoothing baseline](../tools/exponential-smoothing/README.md); separately licensed price optimizer with AMPL and bounded offline backends | Standalone C++/WebAssembly simulation, plain charts and reconciled synthetic accounts; live operation remains future work |
 | [Suffering mitigation](suffering-mitigation/README.md) | **Allocation**: investigate how evidence of human need can inform limited response resources and evaluate actions that reduce suffering | MIT Temporal Fusion Transformer | Research definition; allocation rules and intervention evaluation remain open; forecasting validation is a separate gate |
+| [post-profit-assurance](post-profit-assurance/README.md) | **Allocation** and continuity: research collectively governed support for productive units facing resource shortfalls | Proposed `exchange.assurance.v1` event boundary | Specification placeholder and unfunded exchange events only; no receiver, funded pool or payouts |
 
 Every demonstration must identify its hypothesis, participants, governance,
 resources and flows, objectives and constraints, comparison models, and

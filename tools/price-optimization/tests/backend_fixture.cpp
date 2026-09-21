@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
   const auto evaluated = evaluate_selection(parsed.engine, {1, 1}, unix_now());
   auto result = result_json(parsed, {SolveStatus::recommended, "explicit fixture selection", evaluated.recommendation});
   if (mode == "/fixture/forged") result["recommendation"]["products"][0]["candidate_index"] = 3;
+  if (mode == "/fixture/forged-balance") result["recommendation"]["expected"]["absolute_funding_balance"] = -1;
   if (mode == "/fixture/wrong-id") result["request_id"] = "different-request";
   if (mode == "/fixture/wrong-snapshot") result["input_snapshot"]["currency"] = "USD";
   if (mode == "/fixture/wrong-model") result["model_sha256"] = std::string(64, '0');

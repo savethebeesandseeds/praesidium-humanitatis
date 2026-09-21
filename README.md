@@ -49,6 +49,7 @@ funding worker pay, necessary costs and worker-controlled surplus.
 
 | Tool | Purpose | License | Status |
 | --- | --- | --- | --- |
+| [Exponential smoothing (EWMA)](tools/exponential-smoothing/README.md) | Dependency-free C++17 simple exponential smoothing, uncertainty and past-only diagnostics | [MIT](tools/exponential-smoothing/LICENSE) | Nonseasonal single-level baseline used by exchange; empirical accuracy remains unvalidated |
 | [Temporal Fusion Transformer](tools/temporal-fusion-transformer/README.md) | C++17 / LibTorch / CUDA forecasting with model diagnostics | [MIT](tools/temporal-fusion-transformer/LICENSE) | Implemented; real-data replication remains a gate |
 | [Price optimization](tools/price-optimization/README.md) | C++17 pricing constraints and AMPL mixed-integer optimization | [Worker Protection License 1.0](tools/price-optimization/LICENSE) | Initial synthetic prototype; operational AMPL rights and store integration required |
 
@@ -91,12 +92,14 @@ inputs, process deadlines/cancellation and independently checked explanations.
 
 ## Build and environments
 
-The tools have independent builds and Debian container definitions. The
-optimizer does not require LibTorch or CUDA. Container dependency installation
-is separate from lifecycle and build tasks.
+The tools have independent builds. Simple exponential smoothing is a dependency-free C++17
+library (`ph::exponential_smoothing`); the optimizer and TFT have separate documented
+Debian environments. The smoothing baseline and optimizer do not require
+LibTorch or CUDA. Container dependency installation is separate from lifecycle
+and build tasks.
 
 In an existing Linux environment with CMake and a C++17 compiler, build and test
-the optimizer's dependency-free core:
+the exponential-smoothing baseline and optimizer's dependency-free core:
 
 ```bash
 cmake -S . -B .build/core -DCMAKE_BUILD_TYPE=Release
@@ -126,6 +129,7 @@ Existing build artifacts are preserved; canonical TFT builds now use
 ```text
 LICENSE                              MIT default, with explicit tool exceptions
 tools/
+  exponential-smoothing/             MIT simple exponential smoothing and tests; no model-training data
   temporal-fusion-transformer/        MIT forecasting library, tests, environment
   price-optimization/                 restricted engine, AMPL model, tests, environment
 projects/

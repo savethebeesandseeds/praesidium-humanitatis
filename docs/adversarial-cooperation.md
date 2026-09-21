@@ -41,8 +41,9 @@ need to be accounted for in a fair comparison.
 Here, "post-profit" refers to the absence of private profit extraction by
 passive owners. It does not mean ignoring costs, withholding worker pay,
 eliminating reserves or prohibiting worker-controlled surplus. The implemented
-optimizer currently maximizes expected worker-retained surplus within supplied
-constraints. It has no matched owner-return baseline and its synthetic tests
+optimizer tracks operating funding: earned excess supports lower prices,
+while shortfalls call for useful increases within supplied protections.
+It has no matched owner-return baseline and its synthetic tests
 do not demonstrate economic superiority or real-world self-sufficiency.
 
 ## Note to incumbent owners

@@ -42,9 +42,26 @@ in [its environment record](environment.md).
 
 The optimizer has its own CPU-only Debian container definition and independent
 build. It does not link TFT or require its CUDA environment. AMPL, the C++ SDK,
-solver, and suitable runtime license are external prerequisites for solving;
+solver, and suitable runtime license are external prerequisites for its AMPL backend;
 offline C++ validation tests do not demonstrate AMPL integration or real-store
 performance.
+
+The exchange's simple exponential smoothing (EWMA) core is a reusable MIT tool under
+`tools/exponential-smoothing/`, with public header `ph/exponential_smoothing/ewma.hpp` and CMake target
+`ph::exponential_smoothing`. Its name identifies the implemented nonseasonal,
+single-level method rather than a general forecasting engine. It is pure C++17
+and requires neither JSON, the pricing engine,
+LibTorch nor CUDA. The application retains consumer generation, price-response
+normalization, stockout eligibility, JSON configuration and record adapters in
+`projects/post-profit-exchange/simulation/models.*`. Native and WebAssembly
+exchange builds consume the same forecasting source. No new container is needed.
+
+TFT remains a separate candidate forecasting tool. There is no exchange adapter,
+exchange-trained checkpoint or claim that a few observations suffice to train it
+reliably. The exchange starts with declared priors and an empty history file;
+its optional synthetic history fixture is not empirical evidence. Any later TFT
+integration must preserve those provenance distinctions and earn its use through
+past-only comparisons against simpler methods on appropriate observed data.
 
 The two demonstration directories define their purpose and integration contracts.
 They do not claim finished humanitarian interventions or a deployed autonomous
@@ -54,7 +71,7 @@ covers the intended operation: inventory, procurement, sales, accounts and
 worker benefit. Real-time price selection is one optimization decision within
 that operation. The standalone browser simulator compiles the shared pricing
 core and an explicit bounded enumeration backend to WebAssembly. The Linux AMPL
-backend remains available through `ph.price.v1`; it does not run in the HTML.
+backend remains available through `ph.price.v3`; it does not run in the HTML.
 Synthetic accounts and plain charts are implemented. Operational integration,
 governance and broader risk management follow later.
 

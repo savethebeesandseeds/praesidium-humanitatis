@@ -1,117 +1,288 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Exchange research simulator contract
 
-This MIT application models daily store operations around the separately licensed price-optimization tool. It is a bounded, synthetic research simulator. It supplies no governance, tax, debt, payment, or live price-publication capability. The browser uses explicit enumeration of the existing pricing formulation, with the same core input and selection checks; AMPL itself does not execute inside the standalone page. The AMPL backend remains the separately tested server implementation.
+`exchange.sim.v3` models daily store operations around the separately licensed
+pricing core. The application and its forecast/consumer modules are MIT. The
+browser uses bounded C++ enumeration in WebAssembly; AMPL is a separate native
+backend. The objective remains `operating_balance_tracking`, with salaries fixed
+as inputs. This version adds historical forecasting, synthetic consumers,
+liquidity-supported continuity, dynamic reserve stress and terminal events.
+The EWMA core is the standalone MIT `tools/exponential-smoothing` library. This application
+retains stockout classification, price-response assumptions and JSON adapters;
+the Temporal Fusion Transformer remains a separate, unconnected tool.
 
-## Calling the simulator
+## Commands
 
-Native C++ calls `ph::exchange::run_json(command)`. The native executable reads one JSON command from standard input and writes one JSON response. WebAssembly exports `exchange_run(const char*)`, returning a pointer to a serialized response held until the next call. Its caller must copy the returned text before another call. Calls are synchronous and should run in a browser worker.
+`ph::exchange::run_json(command)` and the native stdin interface accept one JSON
+command. WebAssembly exports `exchange_run(const char*)`; copy its returned text
+before calling again because the same response storage is reused. Calls are
+synchronous; the browser executes them in a worker.
 
 ```json
 {"op":"defaults"}
 ```
 
-This returns `{schema_version: "exchange.sim.v1", status: "ok", config: {...}}`. The complete authoritative defaults are provided by that response, rather than maintained as a second independent JavaScript preset.
+This returns `{schema_version:"exchange.sim.v3", status:"ok", config:{...}}`.
+The default configuration is the build-time simulation section of the central
+[example configuration](../configs/exchange.cfg), embedded by the native/WASM
+build. It is a research example, not an approved operating policy.
+The native example configuration references an empty history file by default.
+Synthetic example history remains an explicit opt-in fixture, never a source of
+observed store evidence. See the [record provenance note](../records/README.md).
 
-```json
-{"op":"simulate","config":{"...":"every required field listed below"}}
+```text
+{"op":"simulate", "config":<complete config>, "history":<history wrapper>}
 ```
 
-The ellipsis above illustrates the command wrapper only; it is not a valid configuration. Send the full defaults configuration after applying edits. Unknown/missing fields, duplicate JSON keys, noninteger money/counts, invalid scenario weights and values beyond bounds are errors. No unknown option is ignored and no input is silently clamped. JSON input is limited to 256 KiB and 24 nested containers. Errors are `{schema_version, status: "error", error: {code: "invalid_simulation", message}}`; no partial trajectory is returned.
+The placeholders above describe the shape, not literal valid JSON. `history` is
+optional and defaults to an empty `exchange.history.v1` wrapper. No other fields
+are optional. Unknown/missing fields, duplicate keys, noninteger money/counts,
+invalid probabilities and out-of-range values are rejected. Input is limited to
+8 MiB and 24 nested containers. A validation error returns `{schema_version,
+status:"error", error:{code:"invalid_simulation",message}}`, without a trajectory.
+A simulated terminal outcome is instead a successful response with an explicit
+per-policy terminal status.
+
+Version 2 configurations require explicit migration: `demand_noise_bps` is removed,
+scenario factors become sigma offsets, and consumers, forecast, assurance and
+combination-limit objects are required. Unsupported fields are never ignored.
+The native `.cfg` runner and record schemas are documented in [FILES.md](../docs/FILES.md).
 
 ## Configuration
 
-All money is integer minor currency units (cents in the EUR default). Every period represents one day. Product order is significant for procurement priority. Basis-point factors use 10,000 for 1×, 8,000 for 0.8×, and 12,000 for 1.2×.
+Money uses integer minor units in one currency; EUR defaults mean cents. Product
+quantities are whole units, and each period is one day. Product order controls
+procurement priority and consumer budget allocation. Basis-point probabilities
+use 10,000 for one; 30,000 sigma-multiplier basis points means three sigma.
 
 | Field | Meaning and bounds |
 | --- | --- |
-| `periods` | Integer 1–365 days. |
-| `seed` | Integer 0–4,294,967,295 for deterministic demand noise. |
-| `currency` | Exactly three uppercase letters; no currency conversion occurs. |
-| `initial_cash` | 0–100,000,000 cents; opening inventory is separately supplied. |
-| `initial_reserve` | Earmarked subset of opening cash, never greater than it. |
-| `procurement_budget` | Maximum daily purchase spending, 0–100,000,000 cents. |
-| `worker_wages` | Protected wages newly due each day, 1–100,000,000 cents. |
-| `operating_cost` | Operating expense newly due each day, 0–100,000,000 cents. |
-| `reserve_contribution` | Maximum new daily reserve allocation, 0–100,000,000 cents. |
-| `reserve_target` | Desired earmarked cash balance, 0–100,000,000 cents. |
-| `demand_noise_bps` | 0–10,000; realized demand factor is drawn from `[10000-noise, 10000+noise]`. |
-| `shock` | Exactly `{start_day, end_day, demand_factor_bps, cost_factor_bps}`. Days are inclusive, 1–365 with end ≥ start; `0/0` disables the shock. Factors are integers 0–30,000. A scheduled shock outside the simulated horizon has no effect. |
-| `scenarios` | Exactly three `{id, factor_bps, probability}` objects; distinct nonempty IDs, factors 0–30,000, probabilities finite in `(0,1]` and summing to one within `1e-9`. |
-| `products` | One to three product objects described below. |
-
-Initial reserve and all global monetary knobs other than positive wages are bounded by 0–100,000,000 cents. These are synthetic assumptions, not approved compensation, affordability or reserve policies.
+| `periods` | 1–365 days. |
+| `seed` | Unsigned 32-bit seed, 0–4,294,967,295. |
+| `currency` | Exactly three uppercase letters. |
+| `initial_cash` | Opening money, 0–100,000,000; opening inventory is a separate endowment. |
+| `initial_reserve` | Earmarked subset of opening cash, never greater than cash. |
+| `procurement_budget` | Daily purchase cap, 0–100,000,000. |
+| `worker_wages` | Fixed daily wages newly due, 1–100,000,000. |
+| `operating_cost` | Fixed daily operating expense newly due, 0–100,000,000. |
+| `reserve_contribution` | Daily cap on new target funding and separately on actual cash earmarking, 0–100,000,000. |
+| `reserve_target` | Configured minimum target, 0–100,000,000; forecast stress can require more. |
+| `feedback_recovery_days` | 1–30, default 3; signed history adjustment uses this response horizon. |
+| `max_price_combinations` | Exact enumeration grid limit, 1–200,000. A larger grid is a model error, not an approximate solve. |
+| `consumers` | All seven fields in the [consumer contract](../docs/MODELS.md#interfaces-and-configuration). |
+| `forecast` | All six EWMA/stress fields in the [forecast contract](../docs/MODELS.md#interfaces-and-configuration). |
+| `assurance` | `{provider:"post_profit_continuity_assurance", trigger_buffer_days:1..365}`. |
+| `shock` | `{start_day,end_day,demand_factor_bps,cost_factor_bps}`; 0/0 disables, otherwise inclusive days 1–365 with end ≥ start; factors 0–30,000. |
+| `scenarios` | Exactly three `{id,sigma_offset_bps,probability}` objects; distinct IDs, offsets −10,000 through 10,000, finite positive probabilities at most one, total within 1e-9 of one. |
+| `products` | 1–12 product objects below. |
 
 Each product requires:
 
 | Field | Meaning and bounds |
 | --- | --- |
-| `sku`, `label` | Nonempty strings of at most 64 bytes without control characters; SKUs are unique. |
-| `unit_cost` | Unshocked replacement cost and opening inventory unit valuation, 0–1,000,000 cents. |
-| `reference_price` | Initial previous price and reference for the demand curve, 1–1,000,000 cents. |
-| `fixed_price` | Literal fixed-baseline public price, independently subject to the same policy checks; it need not be in the optimization grid. |
-| `initial_stock`, `target_stock` | Integer whole units, 0–100,000. |
-| `base_demand` | Daily demand at reference price before factors, 0–10,000 whole units. |
-| `elasticity_bps` | Synthetic linear price-response slope, 0–30,000. This is not an estimated elasticity. |
-| `spoilage_bps` | Fraction of remaining stock spoiled after sales, 0–10,000 basis points. |
-| `affordability_ceiling` | Maximum public price, 1–1,000,000 cents. |
-| `max_change_bps` | Allowed price change from the last successfully selected price, 0–10,000 basis points. It is a per-update limit, not a rolling multiday cap. |
-| `candidate_prices` | One to nine distinct integer prices, each 1–1,000,000 cents. |
+| `sku`, `label` | 1–64 bytes without controls; SKUs unique. |
+| `unit_cost` | Unshocked replacement cost and opening-stock valuation, 0–1,000,000. |
+| `reference_price` | Initial balancing-policy price and consumer-prior reference, 1–1,000,000. |
+| `fixed_price` | Initial and continuing fixed-policy price, 1–1,000,000; need not appear in the candidate grid. |
+| `initial_stock`, `target_stock` | Whole units, 0–100,000. |
+| `base_demand` | Declared cold-start forecast level and reference consumer-demand prior, 0–10,000. |
+| `elasticity_bps` | Declared logit price-response slope, 0–30,000; not an empirically estimated elasticity. |
+| `spoilage_bps` | Fraction of remaining stock spoiled daily, 0–10,000. |
+| `affordability_ceiling` | Maximum posted price, 1–1,000,000; reference and fixed prices must respect it. |
+| `max_change_bps` | Per-update limit from previous price, 0–10,000; no rolling-window policy is inferred. |
+| `candidate_prices` | 1–16 distinct positive integer prices at most 1,000,000, including reference price. Later held prices come from this grid. |
 
-Labels and scenario IDs share the 64-byte bound. Monetary outputs remain exact integers within JavaScript's exact-integer range under these input bounds. Scenario-weighted expected surplus is floating point.
+Scenario IDs use the same string bound. Inputs are research assumptions, not
+empirical evidence or authenticated worker approval. Every candidate count can
+be individually valid while their Cartesian product exceeds the configured
+combination limit.
 
-## Daily sequence and accounting
+## Historical observations
 
-1. Apply the known shock to replacement unit costs and the assumed demand level. Forecasts know this configured shock; this is not an experiment in forecasting an unexpected regime change.
-2. Replenish each product toward target stock, in product order. Spending is capped by the daily procurement budget and cash remaining after existing reserve, existing arrears and the day's wages/operations have been protected. Purchases happen before price selection and therefore can precede an infeasible pricing decision. Deliveries are immediate. Procurement is a deterministic rule, not an optimized variable.
-3. Build the existing price model for that day's stocked inventory, replacement costs, three demand scenarios, wages, operations and the unfunded portion of the daily reserve contribution. The optimized path calls `optimize` with the explicit enumeration backend, at most 729 price combinations. The fixed path independently evaluates its literal fixed prices. Candidates with scenario demand exceeding stock are rejected by the shared core; forecasts are never clipped to inventory to force feasibility.
-4. If a selection passes, calculate realized demand using the selected prices and sell at most available stock. If it fails, trade nothing, output `selected_price: null`, and do not silently reuse the previous recommendation. On closed days, unserved demand is estimated at the configured reference price and explicitly labeled `reference_price_while_closed`; it is not demand at an unselected price.
-5. Spoil the configured fraction of remaining stock, rounded to the nearest whole unit. Record its inventory cost as a loss.
-6. Accrue the day's wages and operating expenses once. Pay wage arrears first, then operating arrears, from available cash. Unpaid amounts remain explicit liabilities. Cash never becomes negative, and no debt or external funding is invented. Existing reserve can be released to pay these obligations.
-7. If no arrears remain, earmark a new reserve allocation limited by the contribution setting, target shortfall, positive realized economic result, and cash not already reserved. This transfer changes available cash but does not change total cash or economic result.
-
-Opening stock is an explicit resource endowment valued at its unshocked unit cost; it is not silently purchased out of opening cash. Inventory uses FIFO cost lots. Thus the planner's replacement cost can differ from the actual FIFO cost of units sold or spoiled after a cost shock. Both are exposed. Daily economic result is:
-
-```text
-revenue - cost_of_goods_sold - waste_cost - newly_due_wages - newly_due_operations
+```json
+{"schema_version":"exchange.history.v1","observations":[
+  {"day":-2,"sku":"bread","price":200,"sales_units":18,"stockout":false},
+  {"day":-1,"sku":"bread","price":200,"sales_units":20,"stockout":false}
+]}
 ```
 
-Procurement changes cash and inventory; it is not also charged as an immediate economic expense. Paying old arrears settles a liability; it is not a second expense. Reserve earmarking is not an expense. Each period checks exact identities:
+The simulator accepts at most 12,000 observations. Days range from −1,000,000
+through −1 and strictly increase for each known SKU; interleaving SKUs is allowed.
+Price is 1–1,000,000, sales 0–1,000,000 and `stockout` must be boolean. The history
+is applied to a separate forecaster for each policy before day one, using the
+same declared price-response normalization. Stockout observations are counted
+but excluded from learning/error metrics. History affects forecasts only; it
+does not add cash, inventory or earned funding. Empty history retains explicit
+cold-start priors. The repository's sample history is synthetic.
+
+## Daily ordering and accounting
+
+1. Observe current replacement costs. Forecast from past uncensored sales and
+   calculate the dynamic reserve target. The demand shock affects future realized
+   arrivals; its upcoming values are not supplied to the forecaster.
+2. Schedule new reserve funding, then replenish toward target stock in product
+   order. Protect existing reserves, arrears and today's wages/operations; enforce
+   cash and procurement-budget limits. Deliveries are immediate.
+3. Construct candidate forecasts from EWMA mean and configured sigma offsets.
+   Cap demand by physical visitor/unit capacity, retain that demand separately,
+   and supply saleable units capped to current stock to the pricing engine.
+   Optimize balancing prices or independently evaluate the literal fixed price.
+4. A certified recommendation selects public prices. Financial infeasibility uses
+   the declared continuity rule: retain current prices and mark uncertified
+   coverage. Technical model error rolls back that day's purchases and scheduled
+   requirement, records a terminal error, and produces no daily trading row.
+5. Generate paired synthetic consumer events; fulfill affordable purchases up to
+   stock. Spoil remaining units with nearest-unit rounding, remove FIFO cost lots
+   and accrue fixed obligations exactly once.
+6. Pay wage arrears first, then operating arrears. Release earmarked reserve if
+   total cash falls below it. Outstanding amounts remain liabilities; no debt or
+   external income is invented.
+7. Score forecasts before updating from uncensored sales. Update actual funding
+   history, re-earmark cash if no arrears remain, reconcile the ledgers and emit
+   assurance/terminal events where required.
+
+Opening stock is an endowment, not another purchase from opening cash. Purchases
+add inventory; cost is expensed only on sale or spoilage. An old arrear payment
+settles a liability without creating another expense. Reserve transfers do not
+change total cash or economic result.
 
 ```text
+actual_contribution = revenue - FIFO_cost_of_goods_sold - FIFO_waste_cost
+economic_result = actual_contribution - wages_due - operating_cost_due
+actual_required = wages_due + operating_cost_due + new_reserve_requirement
+actual_funding_result = actual_contribution - actual_required
 closing_cash = opening_cash - procurement + revenue - wages_paid - operations_paid
-closing_stock = opening_stock + purchases - sales - spoilage
-closing_stock_value = opening_stock_value + purchase_cost - cost_of_goods_sold - waste_cost
+closing_stock = opening_stock + purchased_units - sales_units - waste_units
+closing_inventory_value = opening_inventory_value + purchase_cost
+                          - cost_of_goods_sold - waste_cost
 cash + inventory_value - wage_arrears - operating_arrears
-  = initial_cash + initial_inventory_value + cumulative_economic_result
+    = initial_cash + initial_inventory_value + cumulative_economic_result
 ```
 
-The pricing model covers that day's forecast contribution obligations, not a complete future cash-flow plan. The simulator reveals realized arrears and cash shortages instead of claiming scenario feasibility guarantees liquidity.
+Forecast contribution uses replacement costs; realized contribution uses FIFO
+acquisition costs. A shock can make their signs differ independently of demand
+error. Returned FIFO lots retain unit cost and acquisition day. Neither cash
+nor forecast surplus is interchangeable with realized economic result.
 
-## Demand and paired comparison
+## Funding feedback and reserves
 
-The synthetic response uses a linear factor `max(0, 10000 - elasticity_bps * (price-reference_price) / reference_price)`, with integer division truncating toward zero. Base demand is multiplied by this price-response factor, the day's shock factor, and either a scenario factor or an independent realized noise factor. Factors are applied with nearest-integer rounding while retaining a 10,000 scale until the final whole-unit rounding. This explicit arithmetic is shared by native and browser builds.
+Raw funding history `B` starts at zero. Add actual FIFO economic result and
+subtract only newly scheduled reserve funding. The engine's signed adjustment
+`b` is `B / feedback_recovery_days`, rounded to the nearest cent with nonzero sign
+preserved at a minimum magnitude of one cent. Endowments never enter `B`.
 
-Realized noise comes from an unsigned 32-bit linear congruential generator (`state = state*1664525 + 1013904223` modulo 2³²), mapped into the bounded factor range. It is synthetic pseudorandom noise, not a calibrated probability model or cryptographic generator. Scenario probabilities weight the optimization objective; they do not select the realized noise distribution.
+For scenario surplus `m_s` after fixed obligations and today's reserve requirement,
+the objective is `sum(probability_s * abs(b + m_s))`. Positive `b` permits lower
+or held prices; negative permits higher or held prices; zero holds. Increases
+must preserve the product's contribution relative to holding in every supplied
+saleable-unit scenario. Wages are fixed. Limits can block useful price recovery.
 
-Both paths start with identical cash and stock, receive the same scheduled shock and per-product/per-day noise draws, and apply the same procurement/payment rules. They calculate demand separately at their own prices, so realized sales are not copied from one policy to the other. Their inventories, cash and later purchases may diverge. The simulator uses the same assumed response curve for forecasts and realization with independent noise; it does not yet test structural demand-model misspecification.
+Let `liquid = max(0,cash_after_procurement-wage_arrears-operating_arrears)`.
+Earned credit `C` is zero unless `b > 0`; then it is
+`min(max(B,0),max(liquid-reserve,0))`. Other liquidity is `L = liquid-C`.
+Protected scenario coverage is `m_s + C + L >= 0`. Both can support a temporary
+forecast deficit, but neither replaces signed history in the objective or turns
+opening cash into earned funding. This is the `ph.price.v3`/`public-prices.v3`
+engine `0.4.0` interface, with objective `operating_balance_tracking` version 1.
 
-The objective remains expected worker-retained surplus within supplied protections. The proposed sequential surplus-target/basket objective is not implemented. No matched passive-owner-return model is present; comparing optimized versus fixed public prices does not establish an advantage from eliminating owner extraction.
+The dynamic reserve target combines the configured minimum with `H` days of
+expected fixed-cost shortfall and a `z`-sigma common adverse contribution shock.
+The exact formula, mean/sigma caps and assumptions are in [MODELS.md](../docs/MODELS.md#uncertainty-and-reserve-use).
+This is a conditional stress heuristic, not an absolute worst case or a guarantee
+of sufficient cash. New funding is scheduled as:
 
-## Result fields
+```text
+requirement = min(reserve_contribution,
+    max(0, dynamic_target-initial_reserve-cumulative_scheduled_requirement))
+B_next = B + actual_FIFO_economic_result - requirement
+```
 
-Success returns `schema_version`, `status: "ok"`, the unchanged `config`, `engine`, `objective`, `forecast_cost_basis: "current_replacement_cost"`, `realized_cost_basis: "FIFO"`, `optimized`, `fixed`, `comparison`, and human-readable `limitations`. A cost shock can make forecast contribution surplus positive while realized FIFO economic result is negative; these are different measures, not interchangeable predictions. Each path contains `{mode, summary, rows}`. Array rows are in day order and product entries retain configured product order.
+A higher target can create new requirements. A lower target does not refund
+previous requirements. Releasing/rebuilding the cash earmark never restarts the
+schedule or duplicates a loss. Actual allocation is limited by daily contribution,
+remaining cash target and cash not already reserved, with no outstanding arrears.
 
-`summary` contains cumulative `revenue`, `procurement`, `cost_of_goods_sold`, `waste_cost`, `waste_units`, `sales_units`, `unmet_demand`, `worker_wages_due`, `worker_wages_paid`, `operating_cost_due`, `operating_cost_paid`; plus final `economic_result` (cumulative), `closing_cash`, `reserve_balance`, `available_cash`, `wage_arrears`, `operating_arrears`, `closing_inventory_value`, `initial_inventory_value`, `successful_periods`, `failed_periods`, and `accounting_ok`.
+## Forecast and consumer boundaries
 
-Each row has:
+[MODELS.md](../docs/MODELS.md) specifies all update equations and diagnostics.
+Each SKU predicts from its prior plus earlier eligible sales; sellouts, closed
+periods and future consumer demand never train the current forecast. Sigma is
+smoothed RMS one-step error with a configured prior/floor. Warmup is a visible
+status, not evidence that a model has become accurate. Prediction bands and
+scenario probabilities are configured assumptions, not calibrated tail coverage.
 
-- `day`, pricing `status` and `detail`, `shock_active`, `demand_factor_bps`, `cost_factor_bps`.
-- `opening_cash`, `opening_inventory_value`, `procurement`, `revenue`, `cost_of_goods_sold`, `waste_cost`, `waste_units`, `sales_units`, `unmet_demand`.
-- `worker_wages_due`, `worker_wages_paid`, `operating_cost_due`, `operating_cost_paid`, `wage_arrears`, `operating_arrears`, `economic_result`, `cumulative_economic_result`.
-- `closing_cash`, `available_cash`, `reserve_balance`, `reserve_allocated`, `reserve_released`, `opening_reserve`, `closing_inventory_value`.
-- `cash_reconciliation_error`, `equity_reconciliation_error`, `inventory_reconciliation_error`, `valuation_reconciliation_error`, all exactly zero in a successful response.
-- `expected_worker_surplus` and `scenario_worker_surplus` (three values in scenario order), or `null` when no pricing recommendation exists. These forecast replacement-cost values are distinct from realized FIFO economic result.
-- `products`, with `sku`, `label`, replacement `unit_cost`, `opening_stock`, `opening_inventory_value`, `requested_units`, `purchased_units`, `purchase_cost`, `realized_noise_bps`, `selected_price` (or `null`), `demand_basis`, `demand_reference_price`, `forecast_units` (or `null`), `actual_demand`, `sales_units`, `unmet_demand`, `revenue`, `cost_of_goods_sold`, `waste_units`, `waste_cost`, `closing_stock`, `closing_inventory_value`, and the two product inventory/valuation reconciliation errors.
+Consumers independently draw visit/skip, budget, per-SKU need and binary-logit
+purchase/no-purchase choices. Draws are keyed by seed/day/customer/SKU/event.
+Both policies share underlying draws but spend their own budgets at their own
+prices and inventory. SKU order affects budget allocation. No persistent
+households, substitution or measured real-customer coefficients are modeled.
+The forecaster's declared price response does not learn cross-product budget
+competition, so model mismatch remains possible.
 
-`comparison.optimized_minus_fixed` reports differences in `economic_result`, `closing_cash`, `worker_wages_paid`, `unmet_demand`, and `waste_units`. Positive is not universally better: positive unmet demand or waste indicates a worse result on that measure. Reporting economic result separately from cash and arrears avoids hiding unpaid obligations behind a cash balance.
+## Assurance and termination
+
+Events use `exchange.assurance.v1` with `id`, `policy`, `type`, `provider`, `day`,
+`reason`, `currency`, `required_support`, `cash`, `reserve`, `inventory_value`,
+`funding_balance`, `wage_arrears`, `operating_arrears`, `forecast` and
+`settlement_status:"unfunded_request"`. The provider identifier is
+`post_profit_continuity_assurance`; it is a proposed integration contract, not
+an active insurer or funded service. Recording events sends no message or money.
+
+An event's `id` is currently `policy-day-type`, unique within its simulated path,
+not across runs. Persisted identity is `(run_id, policy, event.id)` using the
+`exchange.assurance-log.v1` envelope. Callers aggregating records must choose
+distinct run IDs in their namespace; the file runner does not enforce that
+across directories. The direct simulator has no run ID and returns local events.
+No receiver or idempotent payout exists. The proposed
+[assurance contract](../../post-profit-assurance/CONTRACT.md) preserves this boundary.
+
+`assurance_requested` is emitted for continuity coverage failure or a fixed-cost
+cash-buffer shortfall. Requested support is the nonnegative gap between cash and
+`fixed_cost * trigger_buffer_days + arrears`; it can be zero when a request is
+raised because modeled coverage failed. `insolvency_declared` accompanies zero
+opening cash, zero cash after fixed obligations, or unpaid fixed obligations.
+That path ends immediately, retaining its actual rows and inventory. The other
+policy can continue. Model failure produces `terminal_status:"model_error"`
+with an assurance event and no invented trading result for that day. This
+insolvency rule is a simulation condition, not a legal determination.
+
+## Results and replay
+
+Success contains `schema_version`, `status:"ok"`, complete `config` and `history`,
+`engine`, `objective`, `forecast_cost_basis:"current_replacement_cost"`,
+`realized_cost_basis:"FIFO"`, `optimized`, `fixed`, `comparison` and `limitations`.
+Each path has `{mode, summary, rows, events}`. Rows are chronological and products
+retain configured order. `optimized` is the API key for balancing feedback.
+
+Daily rows retain the complete money and quantity ledger; raw funding before/
+after, adjustment, earned credit and liquidity buffer; scheduled/actual reserves;
+expected scenario surplus, scenario funding balances and expected absolute score;
+consumers, forecast evidence, FIFO lots, price changes and reconciliation errors.
+`status` is `recommended` or `continuity`, with separate `optimization_status`.
+A continuity row has real trades but null optimizer scores/forecast selection;
+it is not a fallback solver recommendation.
+
+Per-product records include purchase flows, current replacement cost, acquisition
+lots, previous/selected prices, forecast mean/sigma/bands and candidate scenarios,
+pre-update forecast and observation diagnostic, actual affordable demand, sales,
+budget rejections, stock-lost units, spoilage, FIFO cost, revenue and closing value.
+`requested_units` in this product ledger is procurement requested; consumer
+`requested_units` is affordable shopping demand. Do not conflate the two.
+
+Summary records cumulative revenue, procurement, costs, wages and operations due/
+paid, sales, waste, unmet demand and visitor gates; final cash, reserve, arrears,
+stock value, funding history and scheduled reserve requirements. It also reports
+per-SKU summaries and forecast diagnostics, `terminal_status` (`completed`,
+`insolvent`, `model_error`), `terminal_day`, and assurance-request count.
+`successful_periods` counts actual recommended plus continuity trading days;
+`optimized_periods` and `continuity_periods` separate them. Technical failure
+has a terminal event, not a fabricated daily row or a synthetic trade count.
+
+`comparison.optimized_minus_fixed` reports economic result, closing cash, wages
+paid, unmet demand, waste and funding differences. `equal_observed_horizons`
+flags matching row counts. Positive is not universally better, and unequal
+terminal horizons must accompany any comparison. Forecast, consumer and
+accounting records support deterministic replay under the same configuration,
+history and build; they do not establish economic viability or owner-removal
+benefit. See the [verification record](../../../docs/exchange-simulation-verification.md)
+for checks actually performed rather than inferring browser tests from C++ tests.

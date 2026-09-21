@@ -6,9 +6,9 @@
 
 namespace ph::price::integration {
 using Json = nlohmann::json;
-inline constexpr const char* kSchemaVersion = "ph.price.v1";
-inline constexpr const char* kModelVersion = "public-prices.v1";
-inline constexpr const char* kObjectiveId = "expected_worker_surplus";
+inline constexpr const char* kSchemaVersion = "ph.price.v3";
+inline constexpr const char* kModelVersion = "public-prices.v3";
+inline constexpr const char* kObjectiveId = "operating_balance_tracking";
 inline constexpr std::size_t kMaxJsonBytes = 8 * 1024 * 1024;
 
 struct ParsedRequest {

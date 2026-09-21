@@ -1,0 +1,19 @@
+{
+  "schema_version": "exchange.history.v1",
+  "observations": [
+    {"day": -7, "sku": "bread", "price": 200, "sales_units": 18, "stockout": false},
+    {"day": -7, "sku": "beans", "price": 300, "sales_units": 12, "stockout": false},
+    {"day": -6, "sku": "bread", "price": 200, "sales_units": 21, "stockout": false},
+    {"day": -6, "sku": "beans", "price": 300, "sales_units": 14, "stockout": false},
+    {"day": -5, "sku": "bread", "price": 200, "sales_units": 20, "stockout": false},
+    {"day": -5, "sku": "beans", "price": 300, "sales_units": 15, "stockout": false},
+    {"day": -4, "sku": "bread", "price": 200, "sales_units": 19, "stockout": false},
+    {"day": -4, "sku": "beans", "price": 300, "sales_units": 13, "stockout": false},
+    {"day": -3, "sku": "bread", "price": 200, "sales_units": 23, "stockout": false},
+    {"day": -3, "sku": "beans", "price": 300, "sales_units": 16, "stockout": false},
+    {"day": -2, "sku": "bread", "price": 200, "sales_units": 22, "stockout": false},
+    {"day": -2, "sku": "beans", "price": 300, "sales_units": 15, "stockout": false},
+    {"day": -1, "sku": "bread", "price": 200, "sales_units": 20, "stockout": false},
+    {"day": -1, "sku": "beans", "price": 300, "sales_units": 14, "stockout": false}
+  ]
+}

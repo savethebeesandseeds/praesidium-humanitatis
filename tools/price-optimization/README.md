@@ -13,20 +13,21 @@ disrupt incumbent stores, factories and their owners' interests. Our
 is the related research direction for those participants; a
 [future protocol](../../docs/adversarial-cooperation.md) is intended to address
 their interests in relation to any advantage the proposed operating model
-demonstrates. The protocol is not implemented here. The engine's current
-worker-surplus objective and technical validation claims remain unchanged.
+demonstrates. The protocol is not implemented here.
 
 This directory is governed by [its own license](LICENSE), not the repository's MIT license. AMPL and solvers retain their separate terms. Vendor binaries and license files are excluded from the source release. The locally staged evaluation runtime remains in ignored `.build/deps/` under the vendor's bundled Demo license. AMPL is a modeling system that invokes a solver; this project does not relicense AMPL or provide an operational entitlement.
 
 ## Decision and protections
 
-Each request covers one currency and one decision horizon, with candidate prices and whole-unit demand forecasts supplied for each product and scenario. The model chooses exactly one posted price per SKU, shared across scenarios and customers. It maximizes probability-weighted worker surplus after per-unit costs, a fixed worker wage floor, operating costs, and a reserve floor.
+Each request covers one currency and one decision horizon, with candidate prices and whole-unit demand forecasts supplied for each product and scenario. The model chooses exactly one posted price per SKU, shared across scenarios and customers. It minimizes the probability-weighted absolute projected funding balance: `sum(probability[s] * abs(B + contribution[s] - wages - operating_cost - reserve_requirement))`. `B` is the signed feedback adjustment supplied from reconciled actual operating history, optionally spread over a stated recovery horizon. Financial surplus remains an accounting measure, not a reward to maximize.
+
+A positive balance permits price reductions or holding; a negative balance permits increases or holding; zero holds the previous prices. An increase is excluded if it reduces forecast contribution in any supplied scenario. Every SKU must include its previous price among the candidates. These rules express the exchange project's mechanism: good sales fund lower prices, while poor sales call for a useful increase to cover the gap. Limits or demand response can prevent correction; residual imbalance is reported.
 
 The following are hard constraints:
 
 - Every selected price stays below the supplied affordability ceiling and within the allowed change from the previous public price.
 - Forecast units at that candidate fit inventory in **every** supplied scenario. Excess demand is rejected, not silently clipped to stock.
-- Sales contribution covers the wage floor, operating cost, and reserve in **every** scenario, even when a lower-probability scenario reduces expected surplus.
+- Sales contribution plus explicit earned coverage credit and additional operating liquidity covers wages, operating costs, and the scheduled reserve requirement in **every** scenario. Credit must be zero for a nonpositive feedback balance. Additional liquidity may come from initial assets and is available at any balance sign. The caller must establish that the two cash amounts are spendable and disjoint; neither is added to earned feedback or the objective.
 
 There is no owner payout or wage reduction variable. The output surplus is an accounting recommendation for worker retention; the engine cannot enforce where an operator actually sends money. Worker governance must set appropriate ceilings, costs, reserves, scenarios, and wage requirements. A caller's policy reference is an audit label, not authenticated consent. The prototype does not verify fair wages, real-world affordability, forecast truth, ownership, competition law, or compliance with its license.
 
@@ -34,11 +35,13 @@ Amounts are integer minor currency units; products use whole units. The current 
 
 ## Failure behavior
 
-The core rejects missing provenance references, duplicate identifiers or prices, negative/out-of-range inputs, malformed scenario arrays, non-finite probabilities, probability totals different from one, future timestamps, and stale input. The maximum input age is explicit and capped at 24 hours; deployment policy should choose a suitably short value. All input state shares the request timestamp. Validity and maximum age have exclusive expiry boundaries.
+The core rejects missing provenance references, duplicate identifiers or prices, out-of-range inputs, malformed scenario arrays, non-finite probabilities, probability totals different from one, future timestamps, and stale input. The feedback balance may be signed, bounded by ±2^50; coverage credit and liquidity buffer are each nonnegative and at most 2^50. Other money and quantities retain their nonnegative bounds. The maximum input age is explicit and capped at 24 hours; deployment policy should choose a suitably short value. All input state shares the request timestamp. Validity and maximum age have exclusive expiry boundaries.
 
 `optimize` checks freshness before and after solving, rejects clock rollback, and returns no recommendation on solver failure, unavailable dependencies, nonoptimal status, or infeasibility. It does not relax protected constraints or fall back to an alternate optimizer. Every returned binary choice, price, inventory limit, scenario cost coverage, and reported objective is independently checked in C++. Monetary feasibility is recomputed exactly after rounding only choices already within the narrow binary tolerance. Reported optimality is still a solver claim; independent checks establish feasibility, not a general proof of optimality.
 
 The AMPL model is embedded at build time from [`models/public_prices.mod`](models/public_prices.mod). Request strings never enter AMPL code; only validated numerical data and generated numerical indices are serialized. Runtime directories and the solver executable are administrator-controlled configuration. Output is a recommendation with an expiry time. A future publisher must revalidate against current inventory and approved policy and obtain worker authorization. No publisher exists here.
+
+The `ph.price.v3` contract exposes continuity liquidity explicitly. Available operating cash can fund a forecast shortfall while the financial deficit and earned feedback remain visible. This does not relax price, inventory, wage or reserve constraints. The application owns assurance warnings and actual cash-exhaustion decisions; optimizer infeasibility does not by itself mean a store should close.
 
 ## Offline build and checks
 
@@ -107,7 +110,7 @@ cmake --build .build/price-optimization-ampl --parallel
 ctest --test-dir .build/price-optimization-ampl --output-on-failure
 ```
 
-The integration test compares AMPL with exhaustive enumeration on 14 small synthetic fixtures, including AMPL presolve success, presolve infeasibility and HiGHS integer infeasibility. It also checks that a missing runtime produces a failure without a recommendation. It is not registered in an SDK-free build. Runtime integration has passed using API 3.2.0, AMPL 20260809 and HiGHS 1.15.1; the vendor dependencies remain locally staged in ignored `.build/deps/`. Passing these synthetic Demo evaluations does not establish entitlement or readiness for operational store pricing.
+The integration test compares AMPL with bounded enumeration on 14 general fixtures, seven feedback fixtures and three liquidity fixtures with insufficient-cash variants. Cases include AMPL presolve success, presolve infeasibility, HiGHS integer infeasibility, earned discounts, useful increases, blocked harmful increases, and continued coverage from disjoint operating cash. It also checks that a missing runtime produces a failure without a recommendation. It is not registered in an SDK-free build. Vendor dependencies remain locally staged in ignored `.build/deps/`. Passing these synthetic Demo evaluations does not establish entitlement or readiness for operational store pricing. Verification is recorded in the [exchange verification record](../../docs/exchange-simulation-verification.md); the earlier records describe superseded formulations.
 
 ## C++ boundary
 

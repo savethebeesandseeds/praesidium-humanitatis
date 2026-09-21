@@ -1,5 +1,11 @@
 # Optimizer dashboard integration — 2026-09-20
 
+Historical v1 evidence. The current `ph.price.v3` / `public-prices.v3` feedback
+and liquidity contract supersedes the objective described below. All counts,
+hashes and scope statements in this record describe that earlier snapshot;
+see the [current exchange verification](exchange-simulation-verification.md)
+and [current contract](../tools/price-optimization/docs/contract.md).
+
 Goal: make the existing price optimizer callable by a synthetic store dashboard
 through a versioned input/result contract, bounded execution with cancellation,
 and independently verified financial explanations. Governance, broader risk

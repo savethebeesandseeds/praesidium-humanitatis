@@ -85,7 +85,7 @@ results. Conclusions apply only to the conditions evaluated.
 
 | Project | Economic model under study | Current evidence boundary |
 | --- | --- | --- |
-| [post-profit-exchange](../projects/post-profit-exchange/README.md) | Worker-governed store operation centered on public-price exchange, with distribution and allocation of inventory, budgets and surplus. | Standalone synthetic C++/WebAssembly simulation and reconciled accounts; proposed later objective stages and operational evaluation remain open. |
+| [post-profit-exchange](../projects/post-profit-exchange/README.md) | Worker-governed store operation centered on public-price exchange, with distribution and allocation of inventory, budgets and surplus. | Standalone synthetic C++/WebAssembly simulation, reconciled accounts and actual-sales feedback; empirical stability and operational evaluation remain open. |
 | [Suffering mitigation](../projects/suffering-mitigation/README.md) | Allocation of limited response resources according to human need and evaluated benefit. | Research definition. A concrete setting, allocation mechanism and intervention evaluation still need to be developed; forecasting validation is a separate prerequisite for forecast-based use. |
 
 Production is part of the institution's mandate. Factory and laboratory models
@@ -98,10 +98,11 @@ technical evaluation remains independently useful. Forecast accuracy, solver
 correctness, the viability of an economic model and evidence of human benefit
 are distinct claims requiring distinct evidence.
 
-The existing price engine maximizes expected worker-retained surplus subject
-to supplied protections. The proposed store specification adds a surplus
-target and affordability stages that are not yet implemented. Neither
-objective defines all of post-profit economics.
+The price engine tracks the exchange application's actual operating balance.
+Earned excess supports lower prices; a shortfall calls for a useful increase,
+within supplied protections. It minimizes projected absolute funding imbalance,
+without rewarding additional surplus. This exchange mechanism does not define
+all of post-profit economics.
 
 Transition between existing arrangements and proposed models is also a research
 question. The [adversarial-cooperation note](adversarial-cooperation.md) records

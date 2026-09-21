@@ -49,7 +49,19 @@ void parsing_tests() {
   bad_request([](Json& j) { j["extra"] = 1; }, "unknown top-level field rejected");
   bad_request([](Json& j) { j["catalog"][0]["extra"] = 1; }, "unknown nested field rejected");
   bad_request([](Json& j) { j.erase("currency"); }, "missing required field rejected");
-  bad_request([](Json& j) { j["schema_version"] = "ph.price.v2"; }, "unsupported schema rejected");
+  bad_request([](Json& j) { j["schema_version"] = "ph.price.v1"; }, "old profit-maximizing schema rejected");
+  bad_request([](Json& j) { j["schema_version"] = "ph.price.v2"; }, "old feedback-only schema rejected");
+  bad_request([](Json& j) { j.erase("feedback"); }, "feedback must be explicit");
+  bad_request([](Json& j) { j["feedback"]["extra"] = 0; }, "unknown feedback field rejected");
+  bad_request([](Json& j) { j["feedback"]["funding_balance"] = 0.5; }, "fractional balance rejected");
+  bad_request([](Json& j) { j["feedback"]["coverage_credit"] = -1; }, "negative credit rejected");
+  bad_request([](Json& j) { j["feedback"]["coverage_credit"] = 1; }, "unearned credit rejected");
+  bad_request([](Json& j) { j["feedback"].erase("liquidity_buffer"); }, "continuity liquidity must be explicit");
+  bad_request([](Json& j) { j["feedback"]["liquidity_buffer"] = -1; }, "negative liquidity rejected");
+  bad_request([](Json& j) { j["feedback"]["liquidity_buffer"] = 1.0; }, "fractional liquidity rejected");
+  bad_request([](Json& j) { j["feedback"]["liquidity_buffer"] = (1LL << 50) + 1; }, "liquidity bound enforced");
+  bad_request([](Json& j) { j["feedback"]["funding_balance"] = (1LL << 50) + 1; }, "balance bound enforced");
+  bad_request([](Json& j) { j["objective"]["id"] = "expected_worker_surplus"; }, "old objective rejected");
   bad_request([](Json& j) { j["objective"]["id"] = "maximize_revenue"; }, "unsupported objective rejected");
   bad_request([](Json& j) { j["objective"]["version"] = 1.0; }, "objective version float rejected");
   bad_request([](Json& j) { j["policy"]["version"] = 0; }, "policy version lower bound");
@@ -92,7 +104,8 @@ void result_tests() {
   const auto result = result_json(request, solved);
   check(result.at("status") == "recommended", "verified result accepted");
   check(result.at("input_snapshot") == request.snapshot, "result retains validated request");
-  check(result.at("model_version") == "public-prices.v1" && result.at("objective").at("id") == kObjectiveId,
+  check(result.at("model_version") == "public-prices.v3" && result.at("engine_version") == "0.4.0" &&
+        result.at("objective").at("id") == kObjectiveId,
         "versioned model and objective");
   const auto& rec = result.at("recommendation");
   check(rec.at("products")[0].at("selected_price") == 200 && rec.at("products")[1].at("selected_price") == 300,
@@ -105,7 +118,10 @@ void result_tests() {
   check(rec.at("scenarios")[1].at("revenue") == 4800 && rec.at("scenarios")[1].at("worker_surplus") == 1400,
         "exact low-demand scenario accounts");
   check(rec.at("expected").at("revenue") == 6000.0 && rec.at("expected").at("worker_surplus") == 2000.0,
-        "expected amounts agree with model objective");
+        "expected financial amounts recomputed");
+  check(rec.at("expected").at("absolute_funding_balance") == 2000.0 &&
+        rec.at("feedback").at("direction") == "hold" && usual.at("funding_balance") == 2400,
+        "balance objective and direction are explicit");
   check(usual.at("revenue").is_number_integer(), "scenario money uses integer JSON");
   check(rec.at("products")[0].at("scenarios")[0].at("forecast_origin") == "supplied_input",
         "forecast origin distinguished from derived money");
@@ -118,10 +134,14 @@ void result_tests() {
   check(usual.at("coverage").at("slack") == 2400 && usual.at("coverage").at("binding") == false,
         "exact protected coverage slack");
   const auto& local = result.at("local_candidate_exclusions");
-  check(local.at("global_infeasibility_explanation") == false && local.at("candidates").size() == 1,
+  check(local.at("global_infeasibility_explanation") == false && local.at("candidates").size() == 5,
         "explanation does not assert global infeasibility cause");
-  check(local.at("candidates")[0].at("reasons")[0].at("code") == "affordability_ceiling" &&
-        local.at("candidates")[0].at("reasons")[1].at("code") == "price_change_cap",
+  const auto excluded = std::find_if(local.at("candidates").begin(), local.at("candidates").end(),
+      [](const Json& item) { return item.at("sku") == "bread" && item.at("price") == 240; });
+  check(excluded != local.at("candidates").end() &&
+        excluded->at("reasons")[0].at("code") == "affordability_ceiling" &&
+        excluded->at("reasons")[1].at("code") == "price_change_cap" &&
+        excluded->at("reasons")[2].at("code") == "feedback_direction",
         "unavailable candidate has explicit local reasons");
   auto binding_input = request.snapshot;
   binding_input["policy"]["products"][0]["affordability_ceiling"] = 200;
@@ -151,6 +171,12 @@ void result_tests() {
   forged.recommendation->expected_worker_surplus += 1;
   check(result_json(request, forged).at("status") == "rejected_solution", "forged objective rejected");
   forged = solved;
+  forged.recommendation->expected_absolute_balance += 1;
+  check(result_json(request, forged).at("status") == "rejected_solution", "forged balance objective rejected");
+  forged = solved;
+  forged.recommendation->scenario_funding_balance[0] += 1;
+  check(result_json(request, forged).at("status") == "rejected_solution", "forged scenario balance rejected");
+  forged = solved;
   forged.recommendation->candidate_indices[0] = 3;
   check(result_json(request, forged).at("status") == "rejected_solution", "infeasible candidate rejected");
   forged = solved;
@@ -165,11 +191,49 @@ void result_tests() {
   }
   rejects([] { (void)failure_json("id", "recommended", "x", "x"); }, "cannot label failure as success");
 }
+
+void liquidity_tests() {
+  auto input = synthetic_request_json(now);
+  input["policy"]["worker_wage_floor"] = 2500;
+  input["feedback"]["liquidity_buffer"] = 300;
+  for (const auto balance : {Money{0}, Money{-100}}) {
+    input["feedback"]["funding_balance"] = balance;
+    const auto parsed = parse_request(input, now);
+    const auto selected = evaluate_selection(parsed.engine, {1, 1}, now);
+    check(selected.recommendation.has_value(), "unearned liquidity funds continuity at neutral or negative feedback");
+    const auto result = result_json(parsed, {SolveStatus::recommended, "", selected.recommendation});
+    const auto& recommendation = result.at("recommendation");
+    check(recommendation.at("feedback").at("liquidity_buffer") == 300 &&
+          recommendation.at("scenarios")[1].at("coverage").at("slack") == 0,
+          "liquidity is explicit and exact coverage is binding");
+    check(recommendation.at("scenarios")[1].at("worker_surplus") == -300 &&
+          recommendation.at("scenarios")[1].at("funding_balance") == balance - 300,
+          "cash does not become earned income in either financial or feedback accounting");
+    auto altered = parsed;
+    altered.snapshot["feedback"]["liquidity_buffer"] = 299;
+    check(result_json(altered, {SolveStatus::recommended, "", selected.recommendation}).at("status") == "rejected_solution",
+          "independent result validation uses the authoritative liquidity amount");
+  }
+  input["feedback"] = {{"funding_balance", 1}, {"coverage_credit", 100}, {"liquidity_buffer", 200}};
+  const auto mixed = parse_request(input, now);
+  const auto mixed_selection = evaluate_selection(mixed.engine, {1, 1}, now);
+  const auto mixed_result = result_json(mixed, {SolveStatus::recommended, "", mixed_selection.recommendation});
+  check(mixed_result.at("recommendation").at("scenarios")[1].at("coverage").at("slack") == 0,
+        "coverage adds the two caller-established disjoint cash sources");
+  input["feedback"]["coverage_credit"] = Money{1} << 50;
+  input["feedback"]["liquidity_buffer"] = Money{1} << 50;
+  const auto boundary = parse_request(input, now);
+  const auto boundary_selection = evaluate_selection(boundary.engine, {1, 1}, now);
+  const auto boundary_result = result_json(boundary, {SolveStatus::recommended, "", boundary_selection.recommendation});
+  check(boundary_result.at("recommendation").at("scenarios")[1].at("coverage").at("slack") == (Money{1} << 51) - 300,
+        "combined upper-bound cash slack remains an exact JSON integer");
+}
 }  // namespace
 int main() {
   try {
     parsing_tests();
     result_tests();
+    liquidity_tests();
     std::cout << "Integration contract: " << assertions << " assertions passed\n";
     return 0;
   } catch (const std::exception& error) {

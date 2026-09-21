@@ -89,7 +89,9 @@ class AmplBackend final : public SolverBackend {
           result.choices.push_back(choices.get(static_cast<double>(i + 1), static_cast<double>(k + 1)).value());
         }
       }
-      result.expected_worker_surplus = ampl.getObjective("ExpectedWorkerSurplus").value();
+      result.expected_worker_surplus = ampl.getValue(
+          "sum {s in SCENARIOS} probability[s] * scenario_surplus[s]").dbl();
+      result.expected_absolute_balance = ampl.getObjective("ExpectedAbsoluteBalance").value();
       result.detail = ampl_presolve_solved
           ? "AMPL presolve solved (solve_result_num=99); awaiting independent verification"
           : "HiGHS optimal; awaiting independent verification";

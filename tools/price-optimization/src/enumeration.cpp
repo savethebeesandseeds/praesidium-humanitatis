@@ -42,20 +42,33 @@ class EnumerationBackend final : public SolverBackend {
     std::size_t combinations = 1;
     for (std::size_t i = 0; i < request.products.size(); ++i) {
       const auto& product = request.products[i];
+      const auto hold = std::find_if(product.candidates.begin(), product.candidates.end(),
+          [&](const Candidate& candidate) { return candidate.price == product.previous_price; });
       for (std::size_t k = 0; k < product.candidates.size(); ++k) {
         const auto& candidate = product.candidates[k];
         if (candidate.price > product.affordability_ceiling ||
+            (request.funding_balance > 0 && candidate.price > product.previous_price) ||
+            (request.funding_balance < 0 && candidate.price < product.previous_price) ||
+            (request.funding_balance == 0 && candidate.price != product.previous_price) ||
             std::abs(candidate.price - product.previous_price) * 10000 >
                 product.previous_price * product.max_change_basis_points ||
             std::any_of(candidate.forecast_units.begin(), candidate.forecast_units.end(),
                         [&](auto quantity) { return quantity > product.inventory; })) {
           continue;
         }
+        bool harmful_increase = false;
+        if (request.funding_balance < 0 && candidate.price > product.previous_price) {
+          for (std::size_t s = 0; s < request.scenarios.size(); ++s) {
+            if ((candidate.price - product.unit_cost) * candidate.forecast_units[s] <
+                (product.previous_price - product.unit_cost) * hold->forecast_units[s]) harmful_increase = true;
+          }
+        }
+        if (harmful_increase) continue;
         allowed[i].push_back(k);
       }
       if (allowed[i].empty()) {
         return {BackendStatus::infeasible, {}, 0,
-                "no candidate satisfies affordability, price stability and inventory for product " + std::to_string(i)};
+                "no candidate satisfies price, feedback and inventory policy for product " + std::to_string(i)};
       }
       // Division guards both the configured budget and size_t multiplication
       // overflow. Never begin an incomplete search or return an incumbent.
@@ -106,25 +119,28 @@ class EnumerationBackend final : public SolverBackend {
     }
 
     bool found = false;
-    double best_expected = 0;
+    double best_expected = 0, best_financial = 0;
     std::vector<std::size_t> best_indices;
     std::function<void(std::size_t)> visit = [&](std::size_t depth) {
       for (std::size_t s = 0; s < scenario_count; ++s) {
-        if (surplus[s] + remaining_upper[depth][s] < 0) return;
+        if (surplus[s] + remaining_upper[depth][s] + request.coverage_credit + request.liquidity_buffer < 0) return;
       }
       if (depth == branches.size()) {
-        long double expected = 0;
+        long double expected = 0, financial = 0;
         for (std::size_t s = 0; s < scenario_count; ++s) {
-          expected += static_cast<long double>(request.scenarios[s].probability) * surplus[s];
+          expected += static_cast<long double>(request.scenarios[s].probability) *
+              std::abs(request.funding_balance + surplus[s]);
+          financial += static_cast<long double>(request.scenarios[s].probability) * surplus[s];
         }
         // Match the objective representation exposed by evaluate_selection:
         // accumulate in long double, then report/compare the rounded double.
         // Visit original indices in ascending lexicographic order and replace
         // only on improvement, giving a deterministic tie choice.
         const auto objective = static_cast<double>(expected);
-        if (!found || objective > best_expected) {
+        if (!found || objective < best_expected) {
           found = true;
           best_expected = objective;
+          best_financial = static_cast<double>(financial);
           best_indices = indices;
         }
         return;
@@ -143,9 +159,9 @@ class EnumerationBackend final : public SolverBackend {
               "no enumerated selection covers protected wages, operating costs and reserve in every scenario"};
     }
 
-    RawSolution result{BackendStatus::optimal, {}, best_expected,
+    RawSolution result{BackendStatus::optimal, {}, best_financial,
                        "bounded exact enumeration of " + std::to_string(combinations) +
-                           " locally legal combinations; awaiting independent verification"};
+                           " locally legal combinations; awaiting independent verification", best_expected};
     for (std::size_t i = 0; i < request.products.size(); ++i) {
       for (std::size_t k = 0; k < request.products[i].candidates.size(); ++k) {
         result.choices.push_back(k == best_indices[i] ? 1.0 : 0.0);

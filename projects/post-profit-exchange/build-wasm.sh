@@ -9,10 +9,15 @@ sdk="${EXCHANGE_EMSDK:-$root/.build/deps/emsdk-4.0.15}"
 source "$sdk/emsdk_env.sh" >/dev/null 2>&1
 em++ --version | head -1 | grep -F '4.0.15' >/dev/null || { echo 'Requires pinned Emscripten 4.0.15.' >&2; exit 1; }
 mkdir -p "$build"
+python3 "$project/simulation/embed-config.py" "$build/generated/default_config.hpp"
 em++ -std=c++17 -O2 -fexceptions -Wall -Wextra -Wpedantic \
   -I"$root/tools/price-optimization/include" \
+  -I"$root/tools/exponential-smoothing/include" \
+  -I"$build/generated" \
   -isystem "$root/tools/price-optimization/third_party" \
   "$project/simulation/simulation.cpp" \
+  "$project/simulation/models.cpp" \
+  "$root/tools/exponential-smoothing/src/ewma.cpp" \
   "$root/tools/price-optimization/src/engine.cpp" \
   "$root/tools/price-optimization/src/enumeration.cpp" \
   --no-entry -sMODULARIZE=1 -sEXPORT_NAME=createExchangeModule \

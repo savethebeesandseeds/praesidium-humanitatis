@@ -43,7 +43,7 @@ simulation in the finished HTML performs no network requests.
 The build uses Emscripten's documented
 [single-file packaging](https://emscripten.org/docs/tools_reference/settings_reference.html#single-file)
 and [modularized output](https://emscripten.org/docs/compiling/Modularized-Output.html).
-`build-wasm.sh` compiles the MIT simulator plus the restricted C++ pricing core
+`build-wasm.sh` compiles the MIT simulator and reusable MIT exponential-smoothing tool plus the restricted C++ pricing core
 and enumeration backend. `package-html.py` embeds that runtime, plain UI, full
 license notices and a ZIP of corresponding source into
 `dist/post-profit-exchange.html`. AMPL is neither compiled nor redistributed.

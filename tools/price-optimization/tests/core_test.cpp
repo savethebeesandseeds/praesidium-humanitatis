@@ -39,6 +39,9 @@ void test_money_and_policy() {
   check(std::abs(checked.recommendation->expected_worker_surplus - 2000.0) < 1e-9,
         "independent hand-calculated expected surplus");
   check(checked.recommendation->public_prices == std::vector<Money>({200, 300}), "one posted price per SKU");
+  check(checked.recommendation->scenario_funding_balance == std::vector<Money>({2400, 1400}) &&
+        checked.recommendation->expected_absolute_balance == 2000,
+        "zero prior balance preserves exact scenario accounting");
   check(checked.recommendation->valid_until == now + 120, "recommendation expires at input age bound");
   check(!evaluate_selection(r, {3, 1}, now).recommendation, "affordability and change cap enforced");
   auto changed = r;
@@ -67,7 +70,8 @@ void test_money_and_policy() {
   check(raw.choices == std::vector<double>({0, 1, 0, 0, 0, 1, 0}), "oracle selects expected candidates");
 
   changed = r;
-  changed.products = {{"staple", 100, 200, 220, 100, 1000,
+  changed.funding_balance = 1;
+  changed.products = {{"staple", 100, 220, 220, 100, 1000,
                        {{200, {100, 0}}, {220, {10, 10}}}}};
   const auto robust = valid_raw(changed);
   check(robust.choices == std::vector<double>({0, 1}), "higher expectation cannot override low-demand wage floor");
@@ -91,6 +95,14 @@ void test_invalid_inputs() {
     [](Request& q) { q.worker_wage_floor = 0; },
     [](Request& q) { q.operating_cost = -1; },
     [](Request& q) { q.reserve_floor = std::numeric_limits<Money>::max(); },
+    [](Request& q) { q.funding_balance = (Money{1} << 50) + 1; },
+    [](Request& q) { q.funding_balance = -(Money{1} << 50) - 1; },
+    [](Request& q) { q.coverage_credit = -1; },
+    [](Request& q) { q.liquidity_buffer = -1; },
+    [](Request& q) { q.liquidity_buffer = (Money{1} << 50) + 1; },
+    [](Request& q) { q.funding_balance = 1; q.coverage_credit = (Money{1} << 50) + 1; },
+    [](Request& q) { q.coverage_credit = 1; },
+    [](Request& q) { q.funding_balance = -1; q.coverage_credit = 1; },
     [](Request& q) { q.scenarios[0].probability = std::numeric_limits<double>::quiet_NaN(); },
     [](Request& q) { q.scenarios[0].probability = std::numeric_limits<double>::infinity(); },
     [](Request& q) { q.scenarios[0].probability = 0; },
@@ -99,6 +111,7 @@ void test_invalid_inputs() {
     [](Request& q) { q.products[0].sku = q.products[1].sku; },
     [](Request& q) { q.products[0].inventory = -1; },
     [](Request& q) { q.products[0].previous_price = 0; },
+    [](Request& q) { q.products[0].previous_price = 210; },
     [](Request& q) { q.products[0].unit_cost = -1; },
     [](Request& q) { q.products[0].affordability_ceiling = 0; },
     [](Request& q) { q.products[0].max_change_basis_points = 10001; },
@@ -125,6 +138,8 @@ void test_invalid_inputs() {
   check(!validate_request(r, now + 300).ok(), "valid_until is exclusive");
   auto large = r;
   for (auto& p : large.products) {
+    p.previous_price = 1000000000;
+    p.affordability_ceiling = 1000000000;
     p.candidates = {{1000000000, {1000000, 1000000}}};
   }
   check(!validate_request(large, now).ok(), "aggregate arithmetic bound enforced before solve");
@@ -151,6 +166,8 @@ void test_solver_boundary() {
     [](RawSolution& q) { q.choices[1] = std::numeric_limits<double>::infinity(); },
     [](RawSolution& q) { q.expected_worker_surplus += 100; },
     [](RawSolution& q) { q.expected_worker_surplus = std::numeric_limits<double>::quiet_NaN(); },
+    [](RawSolution& q) { q.expected_absolute_balance += 100; },
+    [](RawSolution& q) { q.expected_absolute_balance = std::numeric_limits<double>::quiet_NaN(); },
     [](RawSolution& q) { q.choices[1] = 0; q.choices[3] = 1; }
   };
   for (const auto& mutate : mutations) {
@@ -194,6 +211,7 @@ void test_numeric_ampl_serialization() {
   auto r = ph::price::example::synthetic_request(now);
   r.products[0].sku = "x'; shell 'evil'; #";
   r.forecast_source = "untrusted'; drop choose;";
+  r.liquidity_buffer = 321;
   const auto old = std::locale();
   std::locale::global(std::locale(old, new CommaDecimal));
   const auto data = detail::ampl_data(r);
@@ -206,6 +224,10 @@ void test_numeric_ampl_serialization() {
         "all candidate counts initialized before dependent indexed data");
   check(data.find("let forecast_units[2,3,2] := 5;") != std::string::npos,
         "all scenario quantities encoded in stable index order");
+  check(data.find("let hold_candidate[1] := 2;") != std::string::npos,
+        "hold-price reference serialized by original candidate index");
+  check(data.find("let liquidity_buffer := 321;") != std::string::npos,
+        "continuity liquidity is serialized independently of the earned balance");
 }
 }
 

@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MIT
+cmake_minimum_required(VERSION 3.25)
+project(ph_exponential_smoothing VERSION 0.1.0 LANGUAGES CXX)
+
+add_library(ph_exponential_smoothing src/ewma.cpp)
+add_library(ph::exponential_smoothing ALIAS ph_exponential_smoothing)
+target_include_directories(ph_exponential_smoothing PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_features(ph_exponential_smoothing PUBLIC cxx_std_17)
+set_target_properties(ph_exponential_smoothing PROPERTIES CXX_EXTENSIONS OFF)
+if(MSVC)
+  target_compile_options(ph_exponential_smoothing PRIVATE /W4)
+else()
+  target_compile_options(ph_exponential_smoothing PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(exponential_smoothing_ewma_test tests/ewma_test.cpp)
+  target_link_libraries(exponential_smoothing_ewma_test PRIVATE ph::exponential_smoothing)
+  add_test(NAME exponential_smoothing_ewma COMMAND exponential_smoothing_ewma_test)
+endif()

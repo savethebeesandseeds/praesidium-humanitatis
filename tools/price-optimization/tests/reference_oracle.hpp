@@ -19,7 +19,7 @@ inline RawSolution exhaustive_oracle(const Request& request, Timestamp now) {
   std::function<void(std::size_t)> visit = [&](std::size_t i) {
     if (i == request.products.size()) {
       auto candidate = evaluate_selection(request, indices, now);
-      if (candidate.recommendation && (!best || candidate.recommendation->expected_worker_surplus > best->expected_worker_surplus)) {
+      if (candidate.recommendation && (!best || candidate.recommendation->expected_absolute_balance < best->expected_absolute_balance)) {
         best = std::move(candidate.recommendation);
       }
       return;
@@ -31,7 +31,8 @@ inline RawSolution exhaustive_oracle(const Request& request, Timestamp now) {
   };
   visit(0);
   if (!best) return {BackendStatus::infeasible, {}, 0, "test-only exhaustive oracle: infeasible"};
-  RawSolution raw{BackendStatus::optimal, {}, best->expected_worker_surplus, "test-only exhaustive oracle"};
+  RawSolution raw{BackendStatus::optimal, {}, best->expected_worker_surplus,
+                  "test-only exhaustive oracle", best->expected_absolute_balance};
   for (std::size_t i = 0; i < request.products.size(); ++i) {
     for (std::size_t k = 0; k < request.products[i].candidates.size(); ++k) {
       raw.choices.push_back(k == best->candidate_indices[i] ? 1.0 : 0.0);

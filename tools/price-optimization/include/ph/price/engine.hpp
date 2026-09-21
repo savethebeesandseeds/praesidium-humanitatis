@@ -51,6 +51,17 @@ struct Request {
   Money reserve_floor = 0;
   std::vector<Scenario> scenarios;
   std::vector<Product> products;
+  // Reconciled signed operating balance (or an explicitly amortized control
+  // target). Positive allows reductions, negative allows safe increases,
+  // zero holds the previous prices. Each SKU must include its hold candidate.
+  Money funding_balance = 0;
+  // Independently verified, cash-backed prior earned surplus available to
+  // cover a period shortfall. Must be zero when funding_balance <= 0.
+  Money coverage_credit = 0;
+  // Additional spendable operating cash, disjoint from coverage_credit.
+  // May come from initial assets and may fund continuity at any balance sign.
+  // It never increases earned funding_balance or changes price direction.
+  Money liquidity_buffer = 0;
 };
 
 struct Validation {
@@ -69,6 +80,8 @@ struct Recommendation {
   std::vector<Money> public_prices;
   std::vector<Money> scenario_worker_surplus;
   double expected_worker_surplus = 0;
+  std::vector<Money> scenario_funding_balance;
+  double expected_absolute_balance = 0;
 };
 
 struct Evaluation {
@@ -94,6 +107,7 @@ struct RawSolution {
   std::vector<double> choices;
   double expected_worker_surplus = 0;
   std::string detail;
+  double expected_absolute_balance = 0;
 };
 
 class SolverBackend {

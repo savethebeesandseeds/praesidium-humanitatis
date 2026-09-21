@@ -62,6 +62,14 @@ Validation validate_request(const Request& r, Timestamp now) {
           "worker wage floor must be positive and at most 1000000000 minor units");
   require(money_valid(r.operating_cost) && money_valid(r.reserve_floor),
           "operating cost and reserve must be 0..1000000000 minor units");
+  require(r.funding_balance >= -kMaxAggregate && r.funding_balance <= kMaxAggregate,
+          "funding balance must be within the signed exact aggregate bound");
+  require(r.coverage_credit >= 0 && r.coverage_credit <= kMaxAggregate,
+          "coverage credit must be within the nonnegative exact aggregate bound");
+  require(r.liquidity_buffer >= 0 && r.liquidity_buffer <= kMaxAggregate,
+          "liquidity buffer must be within the nonnegative exact aggregate bound");
+  require(r.funding_balance > 0 || r.coverage_credit == 0,
+          "coverage credit requires a positive funding balance");
   require(!r.scenarios.empty() && r.scenarios.size() <= kMaxScenarios,
           "request needs 1..32 scenarios");
   require(!r.products.empty() && r.products.size() <= kMaxProducts,
@@ -110,6 +118,7 @@ Validation validate_request(const Request& r, Timestamp now) {
         }
       }
     }
+    require(prices.count(p.previous_price) != 0, label + "must include the previous price as a hold candidate");
     if (max_contribution > kMaxAggregate - aggregate_bound) {
       require(false, "aggregate monetary amount exceeds exact arithmetic bound");
       return v;
@@ -152,22 +161,37 @@ Evaluation evaluate_selection(const Request& r, const std::vector<std::size_t>& 
     if (std::abs(c.price - p.previous_price) * 10000 > p.previous_price * p.max_change_basis_points) {
       errors.push_back("price change cap violated for " + p.sku);
     }
+    if ((r.funding_balance > 0 && c.price > p.previous_price) ||
+        (r.funding_balance < 0 && c.price < p.previous_price) ||
+        (r.funding_balance == 0 && c.price != p.previous_price)) {
+      errors.push_back("operating balance price direction violated for " + p.sku);
+    }
+    const auto hold = std::find_if(p.candidates.begin(), p.candidates.end(),
+        [&](const Candidate& candidate) { return candidate.price == p.previous_price; });
     result.skus.push_back(p.sku);
     result.public_prices.push_back(c.price);
     for (std::size_t s = 0; s < r.scenarios.size(); ++s) {
       const auto q = c.forecast_units[s];
       if (q > p.inventory) errors.push_back("inventory exceeded for " + p.sku);
+      if (r.funding_balance < 0 && c.price > p.previous_price &&
+          (c.price - p.unit_cost) * q < (p.previous_price - p.unit_cost) * hold->forecast_units[s]) {
+        errors.push_back("price increase reduces scenario contribution for " + p.sku);
+      }
       result.scenario_worker_surplus[s] += (c.price - p.unit_cost) * q;
     }
   }
-  long double expected = 0;
+  long double expected = 0, absolute_balance = 0;
   for (std::size_t s = 0; s < r.scenarios.size(); ++s) {
-    if (result.scenario_worker_surplus[s] < 0) {
+    if (result.scenario_worker_surplus[s] + r.coverage_credit + r.liquidity_buffer < 0) {
       errors.push_back("wages, operating costs, and reserve not covered in scenario " + r.scenarios[s].id);
     }
     expected += static_cast<long double>(r.scenarios[s].probability) * result.scenario_worker_surplus[s];
+    const auto balance = r.funding_balance + result.scenario_worker_surplus[s];
+    result.scenario_funding_balance.push_back(balance);
+    absolute_balance += static_cast<long double>(r.scenarios[s].probability) * std::abs(balance);
   }
   result.expected_worker_surplus = static_cast<double>(expected);
+  result.expected_absolute_balance = static_cast<double>(absolute_balance);
   if (errors.empty()) evaluation.recommendation = std::move(result);
   return evaluation;
 }
@@ -218,6 +242,11 @@ SolveResult optimize(const Request& request, SolverBackend& backend, const Clock
     if (!std::isfinite(raw.expected_worker_surplus) ||
         std::abs(raw.expected_worker_surplus - expected) > std::max(1e-5, std::abs(expected) * 1e-10)) {
       return failure(SolveStatus::rejected_solution, "solver objective disagrees with independent recomputation");
+    }
+    const auto expected_absolute = evaluated.recommendation->expected_absolute_balance;
+    if (!std::isfinite(raw.expected_absolute_balance) ||
+        std::abs(raw.expected_absolute_balance - expected_absolute) > std::max(1e-5, std::abs(expected_absolute) * 1e-10)) {
+      return failure(SolveStatus::rejected_solution, "solver balance objective disagrees with independent recomputation");
     }
     return {SolveStatus::recommended, "feasible recommendation; worker review required before publication",
             std::move(evaluated.recommendation)};

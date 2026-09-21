@@ -5,10 +5,10 @@
   const $ = (id) => document.getElementById(id);
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const state = { config: null, result: null, runConfig: null, currentDay: 0,
-    dirty: false, busy: false, worker: null, sequence: 0, pending: null };
+    history: {schema_version:"exchange.history.v1",observations:[]}, manifest: null, dirty: false, busy: false, worker: null, sequence: 0, pending: null };
   const colors = { optimized: "#155f93", fixed: "#9c4613" };
   const modes = ["optimized", "fixed"];
-  const modeNames = { optimized: "Optimized", fixed: "Fixed price" };
+  const modeNames = { optimized: "Balancing feedback", fixed: "Fixed price" };
   const numberFormat = new Intl.NumberFormat("en", { maximumFractionDigits: 4 });
   const format = (value) => value === null || value === undefined ? "—"
     : typeof value === "number" ? numberFormat.format(value)
@@ -16,6 +16,7 @@
 
   const globalFields = [
     ["periods", "Days to simulate", 1, 365], ["seed", "Random seed", 0, 4294967295],
+    ["feedback_recovery_days", "Feedback recovery horizon (days)", 1, 30],
     ["currency", "Currency code", "text"], ["initial_cash", "Initial total cash (cents)", 0, 100000000],
     ["initial_reserve", "Initial earmarked reserve (cents)", 0, 100000000],
     ["procurement_budget", "Daily procurement budget (cents)", 0, 100000000],
@@ -23,7 +24,7 @@
     ["operating_cost", "Daily operating cost due (cents)", 0, 100000000],
     ["reserve_contribution", "Daily reserve contribution (cents)", 0, 100000000],
     ["reserve_target", "Reserve target (cents)", 0, 100000000],
-    ["demand_noise_bps", "Demand noise range (basis points)", 0, 10000]
+    ["max_price_combinations", "Maximum candidate combinations", 1, 200000]
   ];
   const shockFields = [
     ["start_day", "First shock day (0 disables)", 0, 365],
@@ -44,8 +45,154 @@
     ["affordability_ceiling", "Price ceiling (cents)", 1, 1000000],
     ["max_change_bps", "Per-day price change cap (basis points)", 0, 10000]
   ];
-  const scenarioFields = [["id", "ID", "text"], ["factor_bps", "Demand factor", 0, 30000],
+  const scenarioFields = [["id", "ID", "text"], ["sigma_offset_bps", "Sigma offset (basis points)", -10000, 10000],
     ["probability", "Probability", 0, 1, "any"]];
+
+  const modelFields = {
+    consumers: [["potential_visitors","Potential visitors per day",0,10000],["visit_probability_bps","Visit probability (bp)",0,10000],
+      ["budget_min","Minimum visitor budget (cents)",0,100000000],["budget_max","Maximum visitor budget (cents)",0,100000000],
+      ["need_probability_bps","Probability of need for each product (bp)",0,10000],["max_units_per_product","Maximum units per product",1,10],
+      ["choice_scale_bps","Purchase/no-purchase response scale (bp)",1,30000]],
+    forecast: [["model","Forecast model","text"],["alpha_bps","EWMA update weight (bp)",1,10000],
+      ["sigma_multiplier_bps","Adverse sigma multiplier (bp; 30000 = 3 sigma)",0,100000],["min_history","Warmup observations",1,3650],
+      ["prior_sigma_units","Initial / minimum error sigma (units)",0,1000000,"any"],["reserve_horizon_days","Reserve planning horizon (days)",1,365]],
+    assurance: [["provider","Assurance contract","text"],["trigger_buffer_days","Assurance trigger: fixed-cost buffer (days)",1,365]]
+  };
+
+  // Strict import helpers begin. Kept independent of the DOM for regression checks.
+  const nonIntegerTokens = new WeakMap();
+  function strictJsonParse(text) {
+    if (typeof text !== "string" || new TextEncoder().encode(text).length > 8 * 1024 * 1024)
+      throw new Error("JSON input exceeds 8 MiB.");
+    let position = 0;
+    const whitespace = () => { while (position < text.length && /[ \t\r\n]/.test(text[position])) ++position; };
+    const failure = (message) => { throw new Error(message + " At character " + position + "."); };
+    const stringToken = () => {
+      const token = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/y;
+      token.lastIndex = position;
+      const match = token.exec(text);
+      if (!match) failure("Expected a JSON string.");
+      position = token.lastIndex;
+      return JSON.parse(match[0]);
+    };
+    const assign = (container, key, entry) => {
+      Object.defineProperty(container, key, {value:entry.value, enumerable:true, writable:true, configurable:true});
+      if (entry.integerToken === false) {
+        if (!nonIntegerTokens.has(container)) nonIntegerTokens.set(container, new Set());
+        nonIntegerTokens.get(container).add(String(key));
+      }
+    };
+    const value = (depth) => {
+      whitespace();
+      const first = text[position];
+      if (first === "{" || first === "[") {
+        if (depth >= 32) failure("JSON nesting exceeds 32.");
+        ++position; whitespace();
+        const array = first === "[", result = array ? [] : {}, keys = new Set(), end = array ? "]" : "}";
+        if (text[position] === end) { ++position; return {value:result}; }
+        let index = 0;
+        while (true) {
+          whitespace();
+          const key = array ? String(index++) : stringToken();
+          if (!array) {
+            if (keys.has(key)) failure("Duplicate JSON key: " + key + ".");
+            keys.add(key); whitespace();
+            if (text[position++] !== ":") failure("Expected colon.");
+          }
+          assign(result, key, value(depth + 1)); whitespace();
+          if (text[position] === end) { ++position; return {value:result}; }
+          if (text[position++] !== ",") failure("Expected comma or container end.");
+        }
+      }
+      if (first === '"') return {value:stringToken()};
+      for (const [token, result] of [["true",true],["false",false],["null",null]]) {
+        if (text.startsWith(token, position)) { position+=token.length; return {value:result}; }
+      }
+      const token = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
+      token.lastIndex = position;
+      const match = token.exec(text);
+      if (!match) failure("Expected a JSON value.");
+      position = token.lastIndex;
+      const number = Number(match[0]);
+      if (!Number.isFinite(number)) failure("JSON number must be finite.");
+      return {value:number, integerToken:!/[.eE]/.test(match[0])};
+    };
+    const result = value(0).value;
+    whitespace();
+    if (position !== text.length) failure("Unexpected trailing JSON content.");
+    return result;
+  }
+  function exactImportKeys(object, keys, where) {
+    if (!object || typeof object !== "object" || Array.isArray(object) ||
+        Object.keys(object).length !== keys.length || keys.some(key => !Object.hasOwn(object,key)))
+      throw new Error(where + " has missing or unknown fields.");
+  }
+  function importInteger(object, key, where) {
+    if (!Number.isSafeInteger(object[key]) || nonIntegerTokens.get(object)?.has(String(key)))
+      throw new Error(where + " must be an exact integer, not a string, boolean or floating-point token.");
+  }
+  function importScalars(object, specs, where) {
+    for (const [key,,minimum,,step] of specs) {
+      if (minimum === "text") {
+        if (typeof object[key] !== "string") throw new Error(where + "." + key + " must be a string.");
+      } else {
+        if (typeof object[key] !== "number" || !Number.isFinite(object[key]))
+          throw new Error(where + "." + key + " must be a finite number.");
+        if (step !== "any") importInteger(object,key,where + "." + key);
+      }
+    }
+  }
+  function validateEditorShape(config) {
+    exactImportKeys(config,[...globalFields.map(([key])=>key),"shock","scenarios","products","consumers","forecast","assurance"],"Configuration");
+    importScalars(config,globalFields,"Configuration");
+    exactImportKeys(config.shock,shockFields.map(([key])=>key),"Shock");
+    importScalars(config.shock,shockFields,"Shock");
+    for (const [name,specs] of Object.entries(modelFields)) {
+      exactImportKeys(config[name],specs.map(([key])=>key),name);
+      importScalars(config[name],specs,name);
+    }
+    if (!Array.isArray(config.scenarios) || config.scenarios.length !== 3) throw new Error("Exactly three scenarios are required.");
+    for (const scenario of config.scenarios) {
+      exactImportKeys(scenario,scenarioFields.map(([key])=>key),"Scenario");
+      importScalars(scenario,scenarioFields,"Scenario");
+    }
+    if (!Array.isArray(config.products) || config.products.length < 1 || config.products.length > 12) throw new Error("Use one through twelve products.");
+    for (const product of config.products) {
+      exactImportKeys(product,[...productFields.map(([key])=>key),"candidate_prices"],"Product");
+      importScalars(product,productFields,"Product");
+      if (!Array.isArray(product.candidate_prices) || product.candidate_prices.length < 1 || product.candidate_prices.length > 16)
+        throw new Error("Each product needs one through sixteen candidate prices.");
+      product.candidate_prices.forEach((_,index)=>importInteger(product.candidate_prices,index,"Candidate price"));
+    }
+  }
+  function importText(object,key,where,limit=1024) {
+    if (typeof object[key] !== "string" || !object[key].length || object[key].length > limit || /[\u0000-\u001f\u007f]/.test(object[key]))
+      throw new Error(where + " must be a nonempty string without controls.");
+  }
+  function validateRunManifest(manifest) {
+    exactImportKeys(manifest,["schema_version","run_id","simulation","records"],"Run configuration");
+    if (manifest.schema_version !== "exchange.run.v1") throw new Error("Unsupported run configuration schema.");
+    if (typeof manifest.run_id !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(manifest.run_id)) throw new Error("Invalid run_id.");
+    exactImportKeys(manifest.records,["history_file","output_directory"],"Records");
+    for (const key of ["history_file","output_directory"]) {
+      importText(manifest.records,key,"Records."+key);
+      if (manifest.records[key].includes("://") || /^(?:\/\/|\\\\)/.test(manifest.records[key]))
+        throw new Error("Record paths must be local paths.");
+    }
+    validateEditorShape(manifest.simulation);
+  }
+  function validateHistoryImport(history) {
+    exactImportKeys(history,["schema_version","observations"],"History");
+    if (history.schema_version !== "exchange.history.v1" || !Array.isArray(history.observations) || history.observations.length > 12000)
+      throw new Error("History requires exchange.history.v1 and at most 12,000 observations.");
+    for (const observation of history.observations) {
+      exactImportKeys(observation,["day","sku","price","sales_units","stockout"],"History observation");
+      for (const key of ["day","price","sales_units"]) importInteger(observation,key,"History "+key);
+      importText(observation,"sku","History SKU",64);
+      if (typeof observation.stockout !== "boolean") throw new Error("History stockout must be boolean.");
+    }
+  }
+  // Strict import helpers end.
 
   function element(tag, text, className) {
     const node = document.createElement(tag);
@@ -102,6 +249,10 @@
     appendFields($("global-fields"), globalFields, "", config);
     $("shock-fields").replaceChildren();
     appendFields($("shock-fields"), shockFields, "shock.", config.shock);
+    for (const [name,specs] of Object.entries(modelFields)) {
+      $(name+"-fields").replaceChildren();
+      appendFields($(name+"-fields"),specs,name+".",config[name]);
+    }
     const scenarioBody = $("scenario-table").tBodies[0];
     scenarioBody.replaceChildren();
     config.scenarios.forEach((scenario, index) => {
@@ -120,7 +271,7 @@
       fieldset.append(element("legend", `Product ${index + 1}`));
       const fields = element("div", undefined, "fields");
       appendFields(fields, productFields, `products.${index}.`, product);
-      fieldset.append(fields, element("p", "Candidate public prices (cents; 1–9 distinct values)", "note"));
+      fieldset.append(fields, element("p", "Candidate public prices (cents; 1–16 distinct values)", "note"));
       const candidates = element("div", undefined, "candidates");
       product.candidate_prices.forEach((price, candidate) => {
         const label = element("label", `Price ${candidate + 1}`);
@@ -136,7 +287,7 @@
         while (prices.includes(candidate) && candidate > 1) --candidate;
         prices.push(candidate);
       }));
-      add.disabled = product.candidate_prices.length >= 9;
+      add.disabled = product.candidate_prices.length >= 16;
       add.dataset.boundDisabled = String(add.disabled);
       const remove = button("Remove last candidate", () => mutateConfig((next) => next.products[index].candidate_prices.pop()));
       remove.disabled = product.candidate_prices.length <= 1;
@@ -194,14 +345,14 @@
     $("export-json").disabled = !state.result;
     $("export-csv").disabled = !state.result;
     if (ready && !state.busy) {
-      $("add-product").disabled = state.config.products.length >= 3;
+      $("add-product").disabled = state.config.products.length >= 12;
       const periods = document.querySelector('[data-path="periods"]');
       $("step").disabled = !state.dirty && state.currentDay >= Number(periods.value);
     }
     for (const input of $("config-form").querySelectorAll("input, button")) {
       input.disabled = state.busy || input.dataset.boundDisabled === "true";
     }
-    $("add-product").disabled = state.busy || !ready || state.config.products.length >= 3;
+    $("add-product").disabled = state.busy || !ready || state.config.products.length >= 12;
     $("config-json").disabled = state.busy;
     $("config-form").setAttribute("aria-busy", String(state.busy));
   }
@@ -240,7 +391,7 @@
         if (event.data.error) throw new Error(event.data.error);
         const result = event.data.result;
         if (!result || result.status !== "ok") throw new Error(result?.error?.message || "C++ returned an invalid result.");
-        if (result.schema_version !== "exchange.sim.v1") throw new Error("Unsupported simulation response schema.");
+        if (result.schema_version !== "exchange.sim.v3") throw new Error("Unsupported simulation response schema; this page requires exchange.sim.v3.");
         pending.complete(result);
       } catch (error) {
         showError(error.message);
@@ -301,6 +452,8 @@
   function defaults() {
     command({ op: "defaults" }, (result) => {
       clearResults();
+      state.history={schema_version:"exchange.history.v1",observations:[]}; state.manifest=null;
+      $("file-state").textContent="Example configuration; no historical records loaded (cold start).";
       buildConfig(result.config);
       status("C++ / WebAssembly ready. Defaults loaded; no simulation has been run.");
     }, "Loading the embedded C++ / WebAssembly runtime and its defaults…");
@@ -314,15 +467,17 @@
       const days = step ? Math.min(horizon, state.currentDay + 1) : horizon;
       const requested = clone(config);
       requested.periods = days;
-      command({ op: "simulate", config: requested }, (result) => {
+      if (!state.history) throw new Error("Load the historical JSON record referenced by the .cfg before running.");
+      command({ op: "simulate", config: requested, history: state.history }, (result) => {
         if (!Array.isArray(result.optimized?.rows) || !Array.isArray(result.fixed?.rows)) throw new Error("Missing daily simulation records.");
+        if (result.objective !== "operating_balance_tracking") throw new Error("The C++ runtime did not return the balancing feedback objective.");
         state.result = result;
         state.runConfig = clone(config);
         state.config = clone(config);
         state.currentDay = days;
         state.dirty = false;
         renderResults();
-        status(`Completed ${days} of ${horizon} days for both policies. Seed ${config.seed}.`);
+        status(`Finished through requested day ${days}. Balancing feedback: ${result.optimized.summary.terminal_status}; fixed price: ${result.fixed.summary.terminal_status}. Seed ${config.seed}.`);
       }, `Simulating days 1–${days} for both policies in the C++ worker…`);
     } catch (error) { showError(error.message); }
   }
@@ -349,6 +504,8 @@
   }
 
   const summaryMetrics = [
+    ["funding_balance", "Accumulated funding balance: +ahead / −shortfall (cents)"],
+    ["cumulative_reserve_requirement", "Scheduled new reserve funding to date (cents)"],
     ["economic_result", "Realized FIFO economic result (cents)"], ["closing_cash", "Closing total cash (cents)"],
     ["available_cash", "Closing available cash (cents)"], ["reserve_balance", "Closing reserve (cents)"],
     ["initial_inventory_value", "Initial inventory endowment (cents)"],
@@ -358,10 +515,17 @@
     ["revenue", "Sales revenue (cents)"], ["procurement", "Procurement paid (cents)"],
     ["sales_units", "Units sold"], ["unmet_demand", "Unmet demand (units)"],
     ["waste_units", "Waste (units)"], ["successful_periods", "Trading days"],
-    ["failed_periods", "Closed / infeasible days"], ["accounting_ok", "Accounting reconciles"]
+    ["continuity_periods", "Days using continuity policy"], ["terminal_status", "Run outcome"], ["terminal_day", "Terminal day"],
+    ["assurance_requests", "Assurance requests (unfunded)"], ["visitors", "Visits"], ["no_purchase", "Visits without purchase"], ["accounting_ok", "Accounting reconciles"]
   ];
   const ledgerMetrics = [
     ["status", "Decision status"], ["shock_active", "Shock"],
+    ["funding_balance_before", "Funding balance before: +ahead / −shortfall"],
+    ["feedback_adjustment", "Feedback adjustment"], ["coverage_credit", "Cash-backed coverage credit"],
+    ["reserve_requirement", "New reserve funding required"],
+    ["actual_contribution", "Actual FIFO operating contribution"], ["actual_required", "Total funding required"],
+    ["actual_funding_result", "Daily funding result"],
+    ["funding_balance_after", "Funding balance after: +ahead / −shortfall"],
     ["opening_cash", "Opening cash"], ["procurement", "Procurement paid"], ["revenue", "Revenue"],
     ["cost_of_goods_sold", "Cost of goods sold"], ["waste_cost", "Waste cost"],
     ["worker_wages_due", "Wages due"], ["worker_wages_paid", "Wages paid"],
@@ -375,29 +539,36 @@
 
   function renderResults() {
     const result = state.result;
-    const days = result.optimized.rows.length;
-    $("result-note").textContent = `${days} days · seed ${result.config.seed} · ${result.config.currency} cents. Optimized and fixed-price paths use paired external draws. Differences below are optimized minus fixed; a positive difference is not always a benefit.`;
+    const days = Math.max(result.optimized.rows.length,result.fixed.rows.length);
+    $("result-note").textContent = `${days} days · seed ${result.config.seed} · ${result.config.currency} cents. Balancing feedback and fixed-price paths use paired consumer draws; each ends separately on insolvency. Totals may cover different observed horizons. Differences below are balancing feedback minus fixed price; a positive difference is not always a benefit.`;
     const summaryRows = summaryMetrics.map(([key, title]) => {
       const optimized = result.optimized.summary[key];
       const fixed = result.fixed.summary[key];
       return [title, optimized, fixed, typeof optimized === "number" && typeof fixed === "number" ? optimized - fixed : "—"];
     });
-    $("summary").replaceChildren(table(["Metric", "Optimized", "Fixed price", "Difference"], summaryRows, "Comparison over simulated days"));
+    $("summary").replaceChildren(table(["Metric", "Balancing feedback", "Fixed price", "Difference"], summaryRows, "Comparison over simulated days"));
     const limitations = element("details");
     limitations.append(element("summary", "Model assumptions returned by C++"));
     const list = element("ul");
     for (const item of result.limitations || []) list.append(element("li", item));
     limitations.append(list);
     $("summary").append(limitations);
+    for (const mode of modes) {
+      $("summary").append(table(["Product","Public price","Stock","Average daily sales","Sold","Waste","Unmet demand","Contribution before shared costs"],
+        result[mode].summary.products.map(p=>[p.sku,p.current_public_price,p.closing_stock,p.average_daily_sales,p.sales_units,p.waste_units,p.unmet_demand,p.operating_contribution]),
+        modeNames[mode]+" — product summary (money in cents)"));
+      const events=element("details"); events.append(element("summary",modeNames[mode]+" — assurance events"),element("pre",JSON.stringify(result[mode].events,null,2)));
+      $("summary").append(events);
+    }
     renderCharts();
     renderLedger();
     $("selected-day").replaceChildren();
-    result.optimized.rows.forEach((row) => {
-      const option = element("option", String(row.day));
-      option.value = row.day;
+    for (let day=1;day<=days;day++) {
+      const option = element("option", String(day));
+      option.value = day;
       $("selected-day").append(option);
-    });
-    $("selected-day").disabled = false;
+    }
+    $("selected-day").disabled = days === 0;
     $("selected-day").value = String(days);
     renderDay();
     $("raw-result").textContent = JSON.stringify(result, null, 2);
@@ -405,9 +576,10 @@
 
   function renderLedger() {
     const rows = [];
-    for (let index = 0; index < state.result.optimized.rows.length; ++index) {
+    for (let index = 0; index < Math.max(state.result.optimized.rows.length,state.result.fixed.rows.length); ++index) {
       for (const mode of modes) {
         const record = state.result[mode].rows[index];
+        if (!record) continue;
         const inspect = button(String(record.day), () => selectDay(record.day, true));
         inspect.className = "day-button";
         inspect.setAttribute("aria-label", `Inspect day ${record.day}, ${modeNames[mode]}`);
@@ -415,7 +587,7 @@
       }
     }
     const ledger = table(["Day", "Policy", ...ledgerMetrics.map(([, title]) => title)], rows, "Daily policy ledger — money in cents");
-    [...ledger.tBodies[0].rows].forEach((row, index) => { row.dataset.day = String(Math.floor(index / 2) + 1); });
+    [...ledger.tBodies[0].rows].forEach((row, index) => { row.dataset.day = row.cells[0].textContent; });
     $("ledger").replaceChildren(ledger);
   }
 
@@ -427,7 +599,7 @@
     return node;
   }
 
-  function chart(title, unit, series) {
+  function chart(title, unit, series, zeroLine = false) {
     const figure = element("figure", undefined, "chart");
     figure.append(element("h3", title));
     const legend = element("div", undefined, "legend");
@@ -445,7 +617,7 @@
     svg.append(svgElement("title", {}, `${title}. Inspect a point or use the daily ledger for exact values.`));
     const left = 100, right = 680, top = 26, bottom = 220;
     const values = series.flatMap((s) => s.points.map((p) => p.value)).filter(Number.isFinite);
-    const count = state.result.optimized.rows.length;
+    const count = state.result.config.periods;
     const low = Math.min(0, ...values), high = Math.max(0, ...values);
     const span = high - low || 1;
     const yMin = low < 0 ? low - span * 0.05 : 0;
@@ -464,6 +636,10 @@
       svgElement("line", { x1: left, y1: bottom, x2: right, y2: bottom, class: "axis" }),
       svgElement("text", { x: left, y: 14 }, unit),
       svgElement("text", { x: (left + right) / 2, y: 252, "text-anchor": "middle" }, "Day"));
+    if (zeroLine) {
+      svg.append(svgElement("line", { x1: left, y1: y(0), x2: right, y2: y(0), stroke: "#333", "stroke-width": 2, "stroke-dasharray": "3 3" }));
+      svg.append(svgElement("text", { x: left + 6, y: y(0) - 5 }, "0 = balanced"));
+    }
     for (const item of series) {
       let segment = [];
       const flush = () => {
@@ -497,11 +673,24 @@
     charts.replaceChildren();
     const seriesFor = (key) => modes.map((mode) => ({ name: modeNames[mode], color: colors[mode], dashed: mode === "fixed",
       points: state.result[mode].rows.map((row) => ({ day: row.day, value: row[key] })) }));
+    charts.append(chart("Accumulated funding balance: +ahead / −shortfall", "cents", seriesFor("funding_balance_after"), true));
+    charts.append(chart("Daily funding result: actual contribution − requirement", "cents", seriesFor("actual_funding_result"), true));
+    for (const mode of modes) {
+      charts.append(chart(`${modeNames[mode]}: actual contribution vs requirement`, "cents", [
+        { name: "Actual operating contribution (FIFO)", color: colors[mode],
+          points: state.result[mode].rows.map((row) => ({ day: row.day, value: row.actual_contribution })) },
+        { name: "Wages + operating costs + scheduled reserve funding", color: "#444", dashed: true,
+          points: state.result[mode].rows.map((row) => ({ day: row.day, value: row.actual_required })) }
+      ]));
+    }
+    charts.append(element("p", "The signed funding balance accumulates actual FIFO operating contribution minus fixed wages, operating costs and scheduled new reserve funding. Positive means ahead; negative means shortfall. It is separate from the current cash or reserve balance. Day detail shows the recovery adjustment, cash-backed credit and any blocked price movement.", "note chart-note"));
     for (const [key, title, unit] of [
       ["closing_cash", "Closing cash", "cents"],
       ["cumulative_economic_result", "Cumulative realized FIFO economic result", "cents"],
       ["reserve_balance", "Earmarked reserve", "cents"],
       ["unmet_demand", "Daily unmet demand", "units"],
+      ["visitors", "Daily visits", "people"],
+      ["no_purchase", "Visits without a fulfilled purchase", "people"],
       ["wage_arrears", "Unpaid wage balance", "cents"],
       ["waste_units", "Daily waste", "units"]
     ]) charts.append(chart(title, unit, seriesFor(key)));
@@ -513,7 +702,7 @@
         }))));
       }
     }
-    charts.append(element("p", "Price gaps mean no price was selected on a closed day. Click a chart point to inspect its day. Exact numbers appear in the ledger and day details.", "note"));
+    charts.append(element("p", "Price series end at each path’s insolvency or model error; forecast shortfalls alone do not close the exchange. Select a day to inspect continuity, assurance requests and forecasts.", "note"));
   }
 
   function selectDay(day, scroll) {
@@ -530,33 +719,74 @@
     for (const row of $("ledger").querySelectorAll("tbody tr")) row.classList.toggle("selected", Number(row.dataset.day) === day);
     for (const mode of modes) {
       const record = state.result[mode].rows.find((row) => row.day === day);
-      if (!record) continue;
+      if (!record) { target.append(element("p",`${modeNames[mode]}: ${state.result[mode].summary.terminal_status}; no operating record for this day.`)); continue; }
       const section = element("section");
       section.append(element("h3", `${modeNames[mode]} — day ${day}`));
       const description = element("p", `${record.status}: ${record.detail}`,
         record.status === "recommended" ? "status-ok" : "status-failed");
       section.append(description);
-      section.append(element("p", `Shock ${record.shock_active ? "active" : "inactive"}; demand factor ${record.demand_factor_bps} bp; cost factor ${record.cost_factor_bps} bp. Expected forecast surplus at replacement cost: ${format(record.expected_worker_surplus)} cents. Scenario forecast surpluses at replacement cost: ${record.scenario_worker_surplus ? record.scenario_worker_surplus.map(format).join(", ") : "—"} cents.`, "note"));
-      section.append(element("p", "Realized FIFO economic result uses the historical acquisition cost of sold and wasted stock. Its difference from forecast surplus can reflect cost basis and reserve treatment as well as demand; reserve allocations are transfers within cash.", "note"));
+      const feedbackRows = [
+        ["Accumulated funding balance before this day (+ahead / −shortfall)", record.funding_balance_before],
+        ["Recovery horizon (days)", state.result.config.feedback_recovery_days],
+        ["Signed daily feedback adjustment", record.feedback_adjustment],
+        ["Positive earned coverage credit backed by cash", record.coverage_credit],
+        ["Separate operating liquidity, including usable reserve",record.liquidity_buffer],
+        ["Forecast-informed reserve target",record.reserve_target],
+        ["Scheduled new reserve funding for this day", record.reserve_requirement],
+        ["Scheduled new reserve funding to date", record.cumulative_reserve_requirement],
+        ["Actual operating contribution: revenue − FIFO cost sold − waste", record.actual_contribution],
+        ["Funding required: fixed wages + operating costs + scheduled reserve funding", record.actual_required],
+        ["Actual daily funding result: contribution − requirement", record.actual_funding_result],
+        ["Accumulated funding balance after this day (+ahead / −shortfall)", record.funding_balance_after],
+        ["Expected absolute forecast balance (controller score; lower is better)", record.expected_absolute_balance],
+        ["Expected signed forecast balance after feedback adjustment", record.expected_funding_balance]
+      ];
+      const feedbackTable = element("div", undefined, "table-scroll");
+      feedbackTable.append(table(["Feedback quantity", "Cents unless labeled otherwise"], feedbackRows, "Actual-sales feedback and funding"));
+      section.append(feedbackTable);
+      section.append(element("p", "The controller scores the signed daily feedback adjustment plus forecast surplus. Cash-backed coverage credit separately supports the hard coverage checks; it does not replace the signed balance used by the objective.", "note"));
+      section.append(element("p", `Scenario forecast balances after feedback adjustment (replacement costs): ${record.scenario_funding_balance ? record.scenario_funding_balance.map(format).join(", ") : "—"} cents. Scenario order: ${state.result.config.scenarios.map((scenario) => scenario.id).join(", ")}.`, "note"));
+      section.append(element("p", `Shock ${record.shock_active ? "active" : "inactive"}; demand factor ${record.demand_factor_bps} bp; cost factor ${record.cost_factor_bps} bp. Forecast worker surplus at replacement cost (diagnostic): ${format(record.expected_worker_surplus)} cents. Scenario forecast worker surpluses (diagnostic): ${record.scenario_worker_surplus ? record.scenario_worker_surplus.map(format).join(", ") : "—"} cents.`, "note"));
+      section.append(element("p", "Actual contribution and realized economic result use FIFO acquisition costs. Forecasts use current replacement costs. Their differences can therefore reflect inventory cost basis as well as demand. Scheduled reserve funding enters the funding balance; cash earmarking is a separate transfer, not an expense.", "note"));
       const productMetrics = [
         ["sku", "SKU"], ["label", "Label"], ["unit_cost", "Replacement cost (cents)"],
         ["opening_stock", "Opening units"], ["requested_units", "Requested units"],
         ["purchased_units", "Purchased units"], ["purchase_cost", "Procurement (cents)"],
-        ["selected_price", "Selected price (cents)"], ["realized_noise_bps", "External demand draw (bp)"],
+        ["previous_price", "Previous price (cents)"], ["selected_price", "Selected price (cents)"],
+        ["price_adjustment", "Price movement"], ["price_adjustment_reason", "Movement / constraint reason"],
+        ["average_acquisition_cost", "Average acquisition cost of remaining stock (cents)"],
+        ["budget_rejected_units", "Units rejected by customer budgets"],
         ["actual_demand", "Actual demand units"], ["sales_units", "Sold units"],
         ["unmet_demand", "Unmet units"], ["waste_units", "Waste units"],
         ["closing_stock", "Closing units"], ["closing_inventory_value", "Closing inventory value (cents)"],
         ["revenue", "Revenue (cents)"], ["cost_of_goods_sold", "FIFO cost sold (cents)"],
         ["waste_cost", "FIFO waste cost (cents)"]
       ];
+      const reasonLabels = {
+        fixed_price_baseline: "Configured fixed-price comparison",
+        continuity_price_assurance_requested: "Continuity policy holds the existing price; assurance requested, forecast coverage not certified",
+        no_feasible_feedback_decision: "No price combination satisfies the feedback and protection constraints",
+        earned_surplus_reduces_prices_when_feasible: "Ahead of the funding plan: reduce prices where feasible",
+        recover_realized_gap_without_harming_forecast_contribution: "Recover the actual shortfall with a price rise that does not reduce forecast contribution",
+        zero_balance_holds_price: "Zero prior balance: hold price (including day 1 with no sales history)",
+        hold_best_feasible_funding_balance: "Hold gives the best feasible balance with the other selected prices",
+        increase_blocked_by_policy_or_demand_response: "No eligible increase: candidate prices, protection limits or demand response block it",
+        decrease_blocked_by_policy_or_inventory: "No eligible decrease: candidate prices, protection limits or inventory block it"
+      };
       const scroll = element("div", undefined, "table-scroll");
-      scroll.append(table(productMetrics.map(([, title]) => title), record.products.map((product) => productMetrics.map(([key]) => product[key])), "Product flows"));
+      scroll.append(table(productMetrics.map(([, title]) => title), record.products.map((product) => productMetrics.map(([key]) => {
+        if (key !== "price_adjustment_reason") return product[key];
+        const explanation = element("span", reasonLabels[product[key]] || product[key]);
+        explanation.title = product[key];
+        return explanation;
+      })), "Product flows and price decisions"));
       section.append(scroll);
       const accountLabels = {
         expected_worker_surplus: "expected_worker_surplus — forecast surplus at replacement cost (cents)",
         economic_result: "economic_result — realized FIFO economic result (cents)",
         cumulative_economic_result: "cumulative_economic_result — cumulative realized FIFO economic result (cents)"
       };
+      section.append(element("pre",JSON.stringify({consumers:record.consumers,reserve_forecast:record.reserve_forecast,product_forecasts:record.products.map(p=>({sku:p.sku,forecast:p.forecast_before_sale,update:p.forecast_update,lots:p.closing_lots}))},null,2)));
       const scalarRows = Object.entries(record).filter(([, value]) => value === null || typeof value !== "object")
         .map(([key, value]) => [accountLabels[key] || key, value]);
       const details = element("details");
@@ -583,7 +813,7 @@
 
   function exportJson() {
     if (!state.result) return;
-    const envelope = { export_format: "post-profit-exchange.simulation.v1", configured_horizon: state.runConfig.periods,
+    const envelope = { export_format: "post-profit-exchange.simulation.v3", configured_horizon: state.runConfig.periods,
       configuration: state.runConfig, result: state.result };
     download(`post-profit-exchange-seed-${state.result.config.seed}-${state.result.config.periods}-days.json`, JSON.stringify(envelope, null, 2), "application/json");
   }
@@ -600,8 +830,8 @@
     const rows = [];
     for (const mode of modes) for (const record of state.result[mode].rows) {
       const { products, ...ledger } = record;
-      rows.push({ record_type: "daily", policy: mode, currency: state.result.config.currency, ...ledger });
-      for (const product of products) rows.push({ record_type: "product", policy: mode, currency: state.result.config.currency, day: record.day,
+      rows.push({ record_type: "daily", policy: modeNames[mode], policy_key: mode, currency: state.result.config.currency, ...ledger });
+      for (const product of products) rows.push({ record_type: "product", policy: modeNames[mode], policy_key: mode, currency: state.result.config.currency, day: record.day,
         ...Object.fromEntries(Object.entries(product).map(([key, value]) => [`product_${key}`, value])) });
     }
     const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
@@ -609,22 +839,38 @@
     download(`post-profit-exchange-seed-${state.result.config.seed}-${state.result.config.periods}-days.csv`, text, "text/csv;charset=utf-8");
   }
 
-  function validateEditorShape(config) {
-    const exactKeys = (object, keys, where) => {
-      if (!object || typeof object !== "object" || Array.isArray(object) ||
-          Object.keys(object).length !== keys.length || keys.some((key) => !Object.hasOwn(object, key))) throw new Error(`${where} has missing or unknown fields.`);
-    };
-    exactKeys(config, [...globalFields.map(([key]) => key), "shock", "scenarios", "products"], "Configuration");
-    exactKeys(config.shock, shockFields.map(([key]) => key), "Shock");
-    if (!Array.isArray(config.scenarios) || config.scenarios.length !== 3) throw new Error("Exactly three scenarios are required.");
-    for (const scenario of config.scenarios) exactKeys(scenario, scenarioFields.map(([key]) => key), "Scenario");
-    if (!Array.isArray(config.products) || config.products.length < 1 || config.products.length > 3) throw new Error("Use one through three products.");
-    for (const product of config.products) {
-      exactKeys(product, [...productFields.map(([key]) => key), "candidate_prices"], "Product");
-      if (!Array.isArray(product.candidate_prices) || product.candidate_prices.length < 1 || product.candidate_prices.length > 9) throw new Error("Each product needs one through nine candidate prices.");
-    }
-  }
-
+  $("load-cfg").addEventListener("change",async(event)=>{
+    try {
+      if (state.busy) throw new Error("Stop the current run before loading files.");
+      const file=event.target.files[0]; if(!file)return;
+      if (file.size > 8*1024*1024) throw new Error("Configuration file exceeds 8 MiB.");
+      const manifest=strictJsonParse(await file.text());
+      if (state.busy) throw new Error("A run started while the file loaded. Stop it before loading files.");
+      validateRunManifest(manifest); clearResults(); state.manifest=manifest; state.history=null;
+      buildConfig(manifest.simulation); configChanged();
+      $("file-state").textContent=`Loaded ${file.name}. Load referenced history JSON: ${manifest.records.history_file}. Native output directory: ${manifest.records.output_directory}.`;
+    } catch(error){showError(error.message);} finally { event.target.value=""; }
+  });
+  $("load-history").addEventListener("change",async(event)=>{
+    try {
+      if (state.busy) throw new Error("Stop the current run before loading files.");
+      const file=event.target.files[0]; if(!file)return;
+      if (file.size > 8*1024*1024) throw new Error("History file exceeds 8 MiB.");
+      const history=strictJsonParse(await file.text());
+      if (state.busy) throw new Error("A run started while the file loaded. Stop it before loading files.");
+      validateHistoryImport(history);
+      state.history=history;configChanged();$("file-state").textContent=`History loaded: ${file.name}, ${history.observations.length} records. C++ validates all records before running.`;
+    } catch(error){showError(error.message);} finally { event.target.value=""; }
+  });
+  $("export-cfg").addEventListener("click",()=>{
+    try {
+      const config=readConfig();if(!config)return;
+      if (!state.history) throw new Error("Load the referenced history JSON before exporting the configuration and history.");
+      const manifest=state.manifest?clone(state.manifest):{schema_version:"exchange.run.v1",run_id:"browser-run",records:{history_file:"history.json",output_directory:"runs/browser-run"}};
+      manifest.simulation=config; manifest.records.history_file="history.json"; download("exchange.cfg",JSON.stringify(manifest,null,2),"application/json");
+      if(state.history)download("history.json",JSON.stringify(state.history,null,2),"application/json");
+    } catch(error){showError(error.message);}
+  });
   $("config-form").addEventListener("submit", (event) => event.preventDefault());
   $("config-form").addEventListener("input", configChanged);
   $("run").addEventListener("click", () => run(false));
@@ -654,7 +900,7 @@
   });
   $("load-json").addEventListener("click", () => {
     try {
-      const config = JSON.parse($("config-json").value);
+      const config = strictJsonParse($("config-json").value);
       validateEditorShape(config);
       buildConfig(config);
       configChanged();

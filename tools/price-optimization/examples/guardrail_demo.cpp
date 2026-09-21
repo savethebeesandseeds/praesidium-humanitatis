@@ -17,6 +17,7 @@ int main() {
     std::cout << result.skus[i] << ": " << result.public_prices[i] << " EUR cents\n";
   }
   std::cout << "Expected worker surplus after protected costs: " << result.expected_worker_surplus
+            << " EUR cents\nExpected absolute funding balance: " << result.expected_absolute_balance
             << " EUR cents\nNo prices published. Worker review is still required.\n";
   const auto rejected = ph::price::evaluate_selection(request, {3, 1}, now);
   if (rejected.recommendation) return 2;

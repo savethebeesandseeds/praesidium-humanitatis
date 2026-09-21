@@ -77,7 +77,7 @@ Json envelope(const std::string& request_id, const std::string& status) {
   return {{"event", "result"}, {"schema_version", kSchemaVersion},
           {"request_id", request_id}, {"status", status},
           {"model_version", kModelVersion}, {"model_sha256", model_sha256},
-          {"engine_version", "0.2.0"}, {"objective", objective()},
+          {"engine_version", "0.4.0"}, {"objective", objective()},
           {"policy", nullptr}, {"input_snapshot", nullptr}};
 }
 Json slack(std::int64_t amount) {
@@ -97,6 +97,19 @@ Json exclusions(const Request& request) {
       for (std::size_t s = 0; s < request.scenarios.size(); ++s)
         if (candidate.forecast_units[s] > product.inventory)
           reasons.push_back({{"code", "inventory"}, {"scenario_id", request.scenarios[s].id}});
+      if ((request.funding_balance > 0 && candidate.price > product.previous_price) ||
+          (request.funding_balance < 0 && candidate.price < product.previous_price) ||
+          (request.funding_balance == 0 && candidate.price != product.previous_price))
+        reasons.push_back({{"code", "feedback_direction"}});
+      if (request.funding_balance < 0 && candidate.price > product.previous_price) {
+        const auto held = std::find_if(product.candidates.begin(), product.candidates.end(),
+            [&](const Candidate& c) { return c.price == product.previous_price; });
+        for (std::size_t s = 0; s < request.scenarios.size(); ++s)
+          if ((candidate.price - product.unit_cost) * candidate.forecast_units[s] <
+              (held->price - product.unit_cost) * held->forecast_units[s])
+            reasons.push_back({{"code", "increase_reduces_contribution"},
+                               {"scenario_id", request.scenarios[s].id}});
+      }
       if (!reasons.empty())
         candidates.push_back({{"sku", product.sku}, {"candidate_index", k},
                               {"price", candidate.price}, {"reasons", reasons}});
@@ -113,6 +126,10 @@ bool matches(const Recommendation& provided, const Recommendation& checked) {
       provided.candidate_indices == checked.candidate_indices &&
       provided.public_prices == checked.public_prices &&
       provided.scenario_worker_surplus == checked.scenario_worker_surplus &&
+      provided.scenario_funding_balance == checked.scenario_funding_balance &&
+      std::isfinite(provided.expected_absolute_balance) &&
+      std::abs(provided.expected_absolute_balance - checked.expected_absolute_balance) <=
+          std::max(1e-5, std::abs(checked.expected_absolute_balance) * 1e-10) &&
       std::isfinite(provided.expected_worker_surplus) &&
       std::abs(provided.expected_worker_surplus - checked.expected_worker_surplus) <=
           std::max(1e-5, std::abs(checked.expected_worker_surplus) * 1e-10);
@@ -147,7 +164,7 @@ Json parse_json(const std::string& text) {
 
 ParsedRequest parse_request(const Json& json, Timestamp now) {
   fields(json, {"schema_version", "request_id", "currency", "as_of", "valid_until",
-                "max_input_age_seconds", "policy", "costs", "catalog", "demand", "objective"}, "request");
+                "max_input_age_seconds", "policy", "costs", "catalog", "demand", "objective", "feedback"}, "request");
   if (string(json.at("schema_version"), "schema_version") != kSchemaVersion)
     invalid("unsupported schema_version");
   ParsedRequest parsed;
@@ -157,6 +174,11 @@ ParsedRequest parse_request(const Json& json, Timestamp now) {
   request.as_of = integer(json.at("as_of"), "as_of");
   request.valid_until = integer(json.at("valid_until"), "valid_until");
   request.max_input_age_seconds = integer(json.at("max_input_age_seconds"), "max_input_age_seconds");
+  const auto& feedback = json.at("feedback");
+  fields(feedback, {"funding_balance", "coverage_credit", "liquidity_buffer"}, "feedback");
+  request.funding_balance = integer(feedback.at("funding_balance"), "feedback.funding_balance");
+  request.coverage_credit = integer(feedback.at("coverage_credit"), "feedback.coverage_credit");
+  request.liquidity_buffer = integer(feedback.at("liquidity_buffer"), "feedback.liquidity_buffer");
   const auto& policy = json.at("policy");
   fields(policy, {"id", "version", "worker_wage_floor", "reserve_contribution", "products"}, "policy");
   parsed.policy_id = string(policy.at("id"), "policy.id");
@@ -320,7 +342,8 @@ Json result_json(const ParsedRequest& parsed, const SolveResult& solved) {
         {"worker_wages", request.worker_wage_floor}, {"operating_cost", request.operating_cost},
         {"reserve_contribution", request.reserve_floor},
         {"worker_surplus", checked.scenario_worker_surplus[s]},
-        {"coverage", slack(checked.scenario_worker_surplus[s])}});
+        {"funding_balance", checked.scenario_funding_balance[s]},
+        {"coverage", slack(checked.scenario_worker_surplus[s] + request.coverage_credit + request.liquidity_buffer)}});
   }
   // Probabilities are input doubles; expected amounts are weighted estimates,
   // while all scenario amounts and hard-constraint slack remain exact integers.
@@ -333,11 +356,17 @@ Json result_json(const ParsedRequest& parsed, const SolveResult& solved) {
       {"operating_cost", sum_probability * request.operating_cost},
       {"reserve_contribution", sum_probability * request.reserve_floor},
       {"worker_surplus", checked.expected_worker_surplus},
+      {"absolute_funding_balance", checked.expected_absolute_balance},
       {"arithmetic", "probability_weighted_floating_point"}};
   result["recommendation"] = {{"currency", request.currency},
       {"monetary_unit", "minor_currency_unit"}, {"checked_at", checked.checked_at},
       {"valid_until", checked.valid_until}, {"products", products},
-      {"scenarios", scenarios}, {"expected", expected}};
+      {"scenarios", scenarios}, {"expected", expected},
+      {"feedback", {{"funding_balance", request.funding_balance},
+                     {"coverage_credit", request.coverage_credit},
+                     {"liquidity_buffer", request.liquidity_buffer},
+                     {"direction", request.funding_balance > 0 ? "down_or_hold" :
+                         request.funding_balance < 0 ? "up_or_hold" : "hold"}}}};
   result["local_candidate_exclusions"] = exclusions(request);
   return result;
 }
@@ -348,6 +377,7 @@ Json synthetic_request_json(Timestamp now) {
   return {{"schema_version", kSchemaVersion}, {"request_id", "synthetic-cooperative-001"},
       {"currency", "EUR"}, {"as_of", now}, {"valid_until", now + 300},
       {"max_input_age_seconds", 120},
+      {"feedback", {{"funding_balance", 0}, {"coverage_credit", 0}, {"liquidity_buffer", 0}}},
       {"policy", {{"id", "synthetic worker assembly resolution 001"}, {"version", 1},
           {"worker_wage_floor", 800}, {"reserve_contribution", 100},
           {"products", Json::array({{{"sku", "bread"}, {"affordability_ceiling", 220}, {"max_change_basis_points", 1000}},

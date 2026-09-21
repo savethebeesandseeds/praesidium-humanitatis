@@ -21,6 +21,7 @@ int main(int argc, char** argv) {
     std::cout << result.skus[i] << ": " << result.public_prices[i] << " EUR cents\n";
   }
   std::cout << "Expected worker surplus after protected costs: " << result.expected_worker_surplus
+            << " EUR cents\nExpected absolute funding balance: " << result.expected_absolute_balance
             << " EUR cents\nValid until (Unix seconds, exclusive): " << result.valid_until
             << "\nNo prices published.\n";
   return 0;

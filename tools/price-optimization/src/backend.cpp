@@ -201,7 +201,12 @@ class Service {
       const double reported = recommendation.at("expected").at("worker_surplus").get<double>();
       const auto expected = verified.recommendation->expected_worker_surplus;
       if (!std::isfinite(reported) || std::abs(reported - expected) > std::max(1e-5, std::abs(expected) * 1e-10))
-        throw std::runtime_error("worker objective disagrees with independent recomputation");
+        throw std::runtime_error("worker financial result disagrees with independent recomputation");
+      const double reported_balance = recommendation.at("expected").at("absolute_funding_balance").get<double>();
+      const auto expected_balance = verified.recommendation->expected_absolute_balance;
+      if (!std::isfinite(reported_balance) ||
+          std::abs(reported_balance - expected_balance) > std::max(1e-5, std::abs(expected_balance) * 1e-10))
+        throw std::runtime_error("worker balance objective disagrees with independent recomputation");
       SolveResult result{SolveStatus::recommended, "independently validated recommendation", verified.recommendation};
       return result_json(parsed, result);
     }

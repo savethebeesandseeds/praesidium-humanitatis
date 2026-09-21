@@ -1,5 +1,11 @@
 # Price optimization verification — 2026-09-20
 
+Historical v1 evidence. The current `ph.price.v3` / `public-prices.v3` feedback
+and liquidity contract supersedes the objective described below. All counts,
+hashes and scope statements in this record describe that earlier snapshot;
+see the [current exchange verification](exchange-simulation-verification.md)
+and [current contract](../tools/price-optimization/docs/contract.md).
+
 The later dashboard boundary has its own
 [integration verification record](optimizer-integration-verification.md),
 including JSON contracts, process deadlines/cancellation and real AMPL checks.

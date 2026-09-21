@@ -122,6 +122,23 @@ void successful(const Json& value, const Json& command) {
   require(value["model_sha256"].get<std::string>().size() == 64, "missing compiled model digest");
   require(value["execution"]["elapsed_ms"].get<long long>() >= 0, "invalid elapsed time");
 }
+Json continuity_command(const std::string& id) {
+  auto command = solve_command(id);
+  command["request"]["policy"]["worker_wage_floor"] = 2500;
+  command["request"]["feedback"]["liquidity_buffer"] = 300;
+  return command;
+}
+void cash_continuity(const Json& value, const Json& command) {
+  require(value["event"] == "result" && value["status"] == "recommended", "cash-funded continuity failed: " + value.dump());
+  require(value["input_snapshot"] == command["request"] && value["schema_version"] == "ph.price.v3",
+          "continuity contract or retained snapshot changed");
+  const auto& rec = value.at("recommendation");
+  require(rec["feedback"]["liquidity_buffer"] == 300 && rec["feedback"]["direction"] == "hold",
+          "asset liquidity must preserve neutral price direction");
+  require(rec["scenarios"][1]["worker_surplus"] == -300 && rec["scenarios"][1]["funding_balance"] == -300 &&
+          rec["scenarios"][1]["coverage"]["slack"] == 0,
+          "supervisor did not independently preserve financial deficit and exact liquidity coverage");
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -143,7 +160,9 @@ int main(int argc, char** argv) {
       auto unknown = solve_command("unknown-field"); unknown["request"]["arbitrary_ampl_code"] = "solve;";
       session.send(unknown); failed(session.next(), "invalid_input", "unknown-field");
       const auto command = solve_command("fixture-success"); session.send(command);
-      accepted(session, "fixture-success"); successful(session.next(), command); session.finish();
+      accepted(session, "fixture-success"); successful(session.next(), command);
+      const auto continuity = continuity_command("fixture-continuity"); session.send(continuity);
+      accepted(session, "fixture-continuity"); cash_continuity(session.next(), continuity); session.finish();
     }
     {
       Session session(service, fixture, "/fixture/hang");
@@ -160,7 +179,7 @@ int main(int argc, char** argv) {
       require(timed["execution"]["elapsed_ms"].get<long long>() < 1500, "deadline did not stop blocked worker promptly");
       session.finish();
     }
-    for (const auto& mode : {"malformed", "forged", "wrong-id", "wrong-snapshot", "wrong-model", "wrong-objective"}) {
+    for (const auto& mode : {"malformed", "forged", "forged-balance", "wrong-id", "wrong-snapshot", "wrong-model", "wrong-objective"}) {
       Session session(service, fixture, "/fixture/" + std::string(mode));
       session.send(solve_command(mode)); accepted(session, mode);
       failed(session.next(), "rejected_solution", mode); session.finish();
@@ -198,6 +217,12 @@ int main(int argc, char** argv) {
       Session real(service, argv[3], argv[4]);
       const auto command = solve_command("real-ampl"); real.send(command);
       accepted(real, "real-ampl"); successful(real.next(), command);
+      auto continuity = continuity_command("real-continuity"); real.send(continuity);
+      accepted(real, "real-continuity"); cash_continuity(real.next(), continuity);
+      continuity["request"]["request_id"] = "real-insufficient-liquidity";
+      continuity["request"]["feedback"]["liquidity_buffer"] = 299;
+      real.send(continuity); accepted(real, "real-insufficient-liquidity");
+      failed(real.next(), "infeasible", "real-insufficient-liquidity");
       auto infeasible = solve_command("real-infeasible");
       infeasible["request"]["policy"]["worker_wage_floor"] = 100000;
       real.send(infeasible); accepted(real, "real-infeasible"); failed(real.next(), "infeasible", "real-infeasible");

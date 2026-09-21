@@ -9,6 +9,7 @@ identified in source headers as
 | Material | Terms |
 | --- | --- |
 | Repository documentation, shared infrastructure, and application projects | MIT unless a specific file identifies another license |
+| Simple exponential smoothing tool under `tools/exponential-smoothing/`, including the extracted EWMA implementation | MIT; independent of the restricted pricing engine |
 | Temporal Fusion Transformer tool, including its existing implementation | MIT; upstream dependencies keep their own terms |
 | Original files under `tools/price-optimization/`, including C++ code, AMPL model files, tests, and tool environment scripts | Worker Protection License 1.0 |
 | Inherited MIT environment code, dependency pins, and attribution notice in the optimizer | Explicit MIT portions retain MIT; new script modifications also require the worker-protection terms. See the [environment notice](../tools/price-optimization/environment/NOTICE.md) |
