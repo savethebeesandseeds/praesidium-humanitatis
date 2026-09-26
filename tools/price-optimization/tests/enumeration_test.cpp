@@ -4,6 +4,7 @@
 #include "feedback_fixtures.hpp"
 #include "synthetic_request.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -102,12 +103,24 @@ void test_deterministic_ties() {
   request.products = {{"tie", 0, 400, 400, 2, 5000,
                        {{400, {1, 1}}, {200, {2, 2}}}}};
   const auto result = solve(request);
-  check(result.recommendation && result.recommendation->candidate_indices == std::vector<std::size_t>{0},
-        "objective tie chooses first original candidate, not lowest price");
+  check(result.recommendation && result.recommendation->candidate_indices == std::vector<std::size_t>{1},
+        "cheaper equal-contribution alternative excludes the original first candidate");
   compare_oracle(request);
   for (int repeat = 0; repeat < 4; ++repeat) {
-    check(solve(request).recommendation->public_prices == std::vector<Money>{400}, "repeated tie choice is deterministic");
+    check(solve(request).recommendation->public_prices == std::vector<Money>{200}, "repeated affordable choice is deterministic");
   }
+  // A genuine scenario tradeoff remains a tie: cheaper is better in the
+  // first scenario but has lower contribution in the second. Preserve the
+  // existing original-order rule for offers that do not dominate each other.
+  request.scenarios = {{"first", 0.5}, {"second", 0.5}};
+  request.products = {{"tradeoff-tie", 0, 200, 200, 40, 5000,
+                       {{200, {10, 20}}, {100, {40, 20}}}}};
+  check(solve(request).recommendation->public_prices == std::vector<Money>{200},
+        "nondominated tie retains the first original candidate");
+  std::reverse(request.products[0].candidates.begin(), request.products[0].candidates.end());
+  check(solve(request).recommendation->public_prices == std::vector<Money>{100},
+        "reversing a nondominated tie still changes the original-order choice");
+  request.scenarios = example::synthetic_request(kNow).scenarios;
   // Different scenario totals have the same reported double objective.
   // Native long-double intermediates must not break the core's tie policy.
   request.worker_wage_floor = 1;
@@ -125,6 +138,10 @@ void test_limits_and_fixed_products() {
   request.products[0].previous_price = 220;
   request.products[1].previous_price = 330;
   for (auto& product : request.products) product.max_change_basis_points = 3000;
+  // Equal quantities make contribution increase with price, so all three
+  // locally legal candidates remain nondominated for this capacity test.
+  for (auto& product : request.products)
+    for (auto& candidate : product.candidates) candidate.forecast_units = {10, 10};
   // Bread has three locally legal choices, beans three. The fourth bread
   // candidate violates policy and does not consume search capacity.
   check(solve(request, 9).status == SolveStatus::recommended, "exact effective combination limit accepted");
@@ -240,6 +257,93 @@ void test_continuity_liquidity() {
   check(solve(boundary).recommendation.has_value(), "maximum liquidity is independent of negative feedback");
 }
 
+void test_affordable_alternatives() {
+  for (const auto& fixture : test::affordability_fixtures(kNow)) {
+    const auto result = solve(fixture.request);
+    check(result.recommendation &&
+          result.recommendation->public_prices == std::vector<Money>{fixture.expected_price},
+          "a cheaper no-worse offer wins regardless of surplus, tie order or feedback sign");
+    check(std::abs(result.recommendation->expected_absolute_balance - fixture.expected_absolute_balance) < 1e-9,
+          "affordability guard leaves the exact financial accounting visible");
+    compare_oracle(fixture.request);
+  }
+  const auto base = test::affordability_fixtures(kNow).front().request;
+  check(!evaluate_selection(base, {0}, kNow).recommendation &&
+        evaluate_selection(base, {1}, kNow).recommendation.has_value(),
+        "core independently rejects the higher-price counterexample");
+  auto cross_subsidy = base;
+  cross_subsidy.products.push_back({"subsidized", 200, 100, 100, 6, 0, {{100, {6, 6}}}});
+  const auto supported = solve(cross_subsidy);
+  check(supported.recommendation &&
+        supported.recommendation->public_prices == std::vector<Money>{160, 100} &&
+        supported.recommendation->scenario_worker_surplus == std::vector<Money>{800, 800},
+        "cheaper no-worse replacement preserves complete coverage including another product's deficit");
+  auto request = base;
+  request.products[0].candidates = {{200, {10, 10}}, {180, {20, 20}}, {160, {30, 30}}};
+  check(affordable_alternative(request, request.products[0], 0) == std::optional<std::size_t>{2},
+        "explanation identifies the cheapest qualifying witness by original index");
+  check(solve(request, 1).recommendation->public_prices == std::vector<Money>{160},
+        "excluded alternatives do not consume enumeration capacity");
+
+  request = base;
+  request.products[0].max_change_basis_points = 1000;
+  check(!locally_admissible_candidate(request, request.products[0], 1) &&
+        !affordable_alternative(request, request.products[0], 0) &&
+        solve(request).recommendation->public_prices == std::vector<Money>{200},
+        "a cheaper offer outside the price-step cap cannot exclude holding");
+  request = base;
+  request.products[0].inventory = 29;
+  check(!affordable_alternative(request, request.products[0], 0) &&
+        solve(request).recommendation->public_prices == std::vector<Money>{200},
+        "an over-inventory forecast cannot be used as an affordable alternative");
+  request = base;
+  request.products[0].affordability_ceiling = 150;
+  check(!locally_admissible_candidate(request, request.products[0], 1) &&
+        !affordable_alternative(request, request.products[0], 0) &&
+        solve(request).status == SolveStatus::infeasible,
+        "an offer above the affordability ceiling is not a valid witness");
+  for (const auto balance : {Money{0}, Money{-1000}}) {
+    request = base;
+    request.funding_balance = balance;
+    check(!affordable_alternative(request, request.products[0], 0) &&
+          solve(request).recommendation->public_prices == std::vector<Money>{200},
+          "a forbidden reduction cannot override neutral or negative feedback direction");
+  }
+  request = base;
+  request.funding_balance = -1000;
+  request.products = {{"unsafe-increases", 100, 160, 200, 100, 2500,
+                       {{160, {50, 50}}, {180, {30, 30}}, {200, {20, 20}}}}};
+  check(!locally_admissible_candidate(request, request.products[0], 1) &&
+        !affordable_alternative(request, request.products[0], 2),
+        "an increase that harms hold contribution cannot serve as a witness");
+
+  request = base;
+  request.products[0].candidates[1].forecast_units = {30, 10};
+  check(!affordable_alternative(request, request.products[0], 0) &&
+        evaluate_selection(request, {0}, kNow).recommendation.has_value(),
+        "higher expected contribution cannot hide a worse individual scenario");
+  request.products[0].candidates[1].forecast_units = {15, 15};
+  check(!affordable_alternative(request, request.products[0], 0) &&
+        evaluate_selection(request, {0}, kNow).recommendation.has_value(),
+        "serving more units alone cannot override lower contribution");
+
+  // Below-cost offers distinguish the quantity test from the money test:
+  // one unit at 100 loses 200, three units at 200 lose 300. The cheaper
+  // offer improves contribution but supplies fewer units, so neither wins
+  // by dominance. Existing cash covers the explicit operating shortfall.
+  request = base;
+  request.worker_wage_floor = 1;
+  request.liquidity_buffer = 1000;
+  request.products = {{"subsidized", 300, 200, 200, 3, 5000,
+                       {{200, {3, 3}}, {100, {1, 1}}}}};
+  check(!affordable_alternative(request, request.products[0], 0) &&
+        solve(request).recommendation->public_prices == std::vector<Money>{200},
+        "better contribution cannot conceal fewer supplied units");
+  request.products[0].candidates = {{200, {0, 0}}, {100, {0, 0}}};
+  check(solve(request).recommendation->public_prices == std::vector<Money>{100},
+        "equal zero quantities and contribution still prefer the cheaper legal offer");
+}
+
 void test_random_oracle_agreement() {
   std::mt19937 random(69317);
   for (int fixture = 0; fixture < 120; ++fixture) {
@@ -270,6 +374,7 @@ int main() {
     test_validation_and_freshness();
     test_operating_balance_feedback();
     test_continuity_liquidity();
+    test_affordable_alternatives();
     test_random_oracle_agreement();
     std::cout << assertions << " enumeration assertions passed\n";
     return 0;

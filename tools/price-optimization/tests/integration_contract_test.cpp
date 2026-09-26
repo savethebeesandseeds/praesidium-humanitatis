@@ -36,6 +36,8 @@ void parsing_tests() {
   check(parsed.engine.worker_policy_reference == "synthetic worker assembly resolution 001@1",
         "policy identity/version audit label");
   check(parsed.engine.scenarios[0].probability == 0.6, "probability parsed");
+  check(input.at("schema_version") == "ph.price.v3" && input.at("objective").at("version") == 2,
+        "new policy semantics are explicit without changing the request shape");
   rejects([] { (void)parse_json("{\"x\":1,\"x\":2}"); }, "duplicate root keys rejected");
   rejects([] { (void)parse_json("{\"a\":[{\"x\":1,\"x\":2}]}"); }, "duplicate nested keys rejected");
   rejects([] { (void)parse_json("{\"a\":1,\"\\u0061\":2}"); }, "escaped duplicate key rejected");
@@ -63,7 +65,8 @@ void parsing_tests() {
   bad_request([](Json& j) { j["feedback"]["funding_balance"] = (1LL << 50) + 1; }, "balance bound enforced");
   bad_request([](Json& j) { j["objective"]["id"] = "expected_worker_surplus"; }, "old objective rejected");
   bad_request([](Json& j) { j["objective"]["id"] = "maximize_revenue"; }, "unsupported objective rejected");
-  bad_request([](Json& j) { j["objective"]["version"] = 1.0; }, "objective version float rejected");
+  bad_request([](Json& j) { j["objective"]["version"] = 1; }, "old balance-only objective version rejected");
+  bad_request([](Json& j) { j["objective"]["version"] = 2.0; }, "objective version float rejected");
   bad_request([](Json& j) { j["policy"]["version"] = 0; }, "policy version lower bound");
   bad_request([](Json& j) { j["policy"]["id"] = std::string(255, 'a'); }, "combined policy reference length bounded");
   bad_request([](Json& j) { j["policy"]["worker_wage_floor"] = 800.0; }, "float money rejected");
@@ -104,8 +107,8 @@ void result_tests() {
   const auto result = result_json(request, solved);
   check(result.at("status") == "recommended", "verified result accepted");
   check(result.at("input_snapshot") == request.snapshot, "result retains validated request");
-  check(result.at("model_version") == "public-prices.v3" && result.at("engine_version") == "0.4.0" &&
-        result.at("objective").at("id") == kObjectiveId,
+  check(result.at("model_version") == "public-prices.v4" && result.at("engine_version") == "0.5.0" &&
+        result.at("objective").at("id") == kObjectiveId && result.at("objective").at("version") == 2,
         "versioned model and objective");
   const auto& rec = result.at("recommendation");
   check(rec.at("products")[0].at("selected_price") == 200 && rec.at("products")[1].at("selected_price") == 300,
@@ -228,12 +231,50 @@ void liquidity_tests() {
   check(boundary_result.at("recommendation").at("scenarios")[1].at("coverage").at("slack") == (Money{1} << 51) - 300,
         "combined upper-bound cash slack remains an exact JSON integer");
 }
+
+void affordable_alternative_explanations() {
+  auto input = synthetic_request_json(now);
+  input["request_id"] = "supplied-affordability-counterexample";
+  input["feedback"]["funding_balance"] = 1000;
+  input["policy"]["worker_wage_floor"] = 400;
+  input["policy"]["reserve_contribution"] = 0;
+  input["policy"]["products"] = Json::array({{{"sku", "staple"}, {"affordability_ceiling", 200},
+                                              {"max_change_basis_points", 2000}}});
+  input["costs"] = {{"operating_cost", 0},
+                    {"unit_costs", Json::array({{{"sku", "staple"}, {"amount", 100}}})}};
+  input["catalog"] = Json::array({{{"sku", "staple"}, {"previous_price", 200},
+                                   {"inventory", 100}, {"candidate_prices", {200, 160}}}});
+  input["demand"]["forecasts"] = Json::array({
+      {{"sku", "staple"}, {"price", 200}, {"units", {10, 10}}},
+      {{"sku", "staple"}, {"price", 160}, {"units", {30, 30}}}});
+  for (std::size_t affordable_index : {std::size_t{1}, std::size_t{0}}) {
+    const auto parsed = parse_request(input, now);
+    const auto selected = evaluate_selection(parsed.engine, {affordable_index}, now);
+    check(selected.recommendation.has_value(), "cheaper supplied offer passes independent validation");
+    const auto result = result_json(parsed, {SolveStatus::recommended, "", selected.recommendation});
+    const auto& exclusions = result.at("local_candidate_exclusions");
+    check(exclusions.at("global_infeasibility_explanation") == false && exclusions.at("candidates").size() == 1,
+          "affordability exclusion remains a local explanation");
+    const auto& excluded = exclusions.at("candidates")[0];
+    const auto& reason = excluded.at("reasons")[0];
+    check(excluded.at("price") == 200 && excluded.at("candidate_index") == 1 - affordable_index &&
+          reason.at("code") == "affordable_alternative" &&
+          reason.at("alternative_candidate_index") == affordable_index && reason.at("alternative_price") == 160,
+          "higher-price exclusion names the cheaper witness with stable original indices");
+    const auto& scenario = result.at("recommendation").at("scenarios")[0];
+    check(scenario.at("revenue") == 4800 && scenario.at("unit_cost_total") == 3000 &&
+          scenario.at("worker_surplus") == 1400 && scenario.at("funding_balance") == 2400,
+          "affordable selection reports its larger surplus without disguising the balance score");
+    std::reverse(input["catalog"][0]["candidate_prices"].begin(), input["catalog"][0]["candidate_prices"].end());
+  }
+}
 }  // namespace
 int main() {
   try {
     parsing_tests();
     result_tests();
     liquidity_tests();
+    affordable_alternative_explanations();
     std::cout << "Integration contract: " << assertions << " assertions passed\n";
     return 0;
   } catch (const std::exception& error) {

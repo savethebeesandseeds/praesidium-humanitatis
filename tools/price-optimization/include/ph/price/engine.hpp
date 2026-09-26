@@ -10,6 +10,8 @@
 
 namespace ph::price {
 
+inline constexpr int kObjectiveVersion = 2;
+
 // A single currency and one decision horizon per request. Monetary values are
 // integer minor currency units, e.g. euro cents. Quantities are whole units.
 using Money = std::int64_t;
@@ -91,6 +93,18 @@ struct Evaluation {
 
 // Validates structure, numeric bounds, provenance references, and freshness.
 Validation validate_request(const Request& request, Timestamp now);
+
+// Preconditions: request has passed validate_request, and product belongs to it.
+// Local checks exclude portfolio coverage and the affordability preference.
+bool locally_admissible_candidate(const Request& request, const Product& product,
+                                  std::size_t candidate_index);
+// Prefer a strictly cheaper locally admissible offer when its supplied units
+// AND contribution are no lower in every scenario. Returns the cheapest such
+// alternative's original index. Replacement preserves portfolio coverage;
+// the balance objective cannot override this protection.
+std::optional<std::size_t> affordable_alternative(const Request& request,
+                                                const Product& product,
+                                                std::size_t candidate_index);
 
 // Independently recomputes every constraint using exact integer money. A
 // feasible selection is not by itself a claim of optimality or permission to

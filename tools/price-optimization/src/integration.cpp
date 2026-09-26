@@ -67,7 +67,7 @@ const char* status_name(SolveStatus status) {
   }
   return "solver_failed";
 }
-Json objective() { return {{"id", kObjectiveId}, {"version", 1}}; }
+Json objective() { return {{"id", kObjectiveId}, {"version", kObjectiveVersion}}; }
 Json envelope(const std::string& request_id, const std::string& status) {
 #ifdef PH_PRICE_MODEL_SHA256
   constexpr const char* model_sha256 = PH_PRICE_MODEL_SHA256;
@@ -77,7 +77,7 @@ Json envelope(const std::string& request_id, const std::string& status) {
   return {{"event", "result"}, {"schema_version", kSchemaVersion},
           {"request_id", request_id}, {"status", status},
           {"model_version", kModelVersion}, {"model_sha256", model_sha256},
-          {"engine_version", "0.4.0"}, {"objective", objective()},
+          {"engine_version", "0.5.0"}, {"objective", objective()},
           {"policy", nullptr}, {"input_snapshot", nullptr}};
 }
 Json slack(std::int64_t amount) {
@@ -89,6 +89,10 @@ Json exclusions(const Request& request) {
     for (std::size_t k = 0; k < product.candidates.size(); ++k) {
       const auto& candidate = product.candidates[k];
       Json reasons = Json::array();
+      if (const auto alternative = affordable_alternative(request, product, k))
+        reasons.push_back({{"code", "affordable_alternative"},
+                           {"alternative_candidate_index", *alternative},
+                           {"alternative_price", product.candidates[*alternative].price}});
       if (candidate.price > product.affordability_ceiling)
         reasons.push_back({{"code", "affordability_ceiling"}});
       if (std::abs(candidate.price - product.previous_price) * 10000 >
@@ -255,7 +259,7 @@ ParsedRequest parse_request(const Json& json, Timestamp now) {
   const auto& requested_objective = json.at("objective");
   fields(requested_objective, {"id", "version"}, "objective");
   if (string(requested_objective.at("id"), "objective.id") != kObjectiveId ||
-      integer(requested_objective.at("version"), "objective.version") != 1)
+      integer(requested_objective.at("version"), "objective.version") != kObjectiveVersion)
     invalid("unsupported objective id or version");
   const auto validation = validate_request(request, now);
   if (!validation.ok()) invalid(errors(validation));

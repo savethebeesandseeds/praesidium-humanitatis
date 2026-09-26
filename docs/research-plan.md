@@ -19,13 +19,12 @@ require separate evidence.
 | **Production** | Worker-governed factory and laboratory models. | Select a concrete productive process; define inputs, outputs, work, capacity, governance and continuity before creating a demonstration project. |
 | **Distribution** | Provision, transport and availability of goods; a separate project placeholder. | Define a distribution model, its participants, resources and evidence requirements. |
 | **Exchange** | The `post-profit-exchange` store model, followed by comparison with other mechanisms where appropriate. | Evaluate operating-balance feedback against empirical demand response; define settlement workflow and distinguish supplied scenarios from evidence of actual response to prices. |
-| **Allocation** | Store budgets and surplus, and the suffering-mitigation model for limited response resources. | Specify decision rights, priorities, shortage rules and outcome measures for each setting. |
+| **Allocation** | Store budgets and surplus; a separate project placeholder. | Specify decision rights, priorities, shortage rules and outcome measures for each setting. |
 
 The store now has an initial synthetic C++/WebAssembly simulator and reconciled
 accounts and operating-balance feedback. Its next research work is empirical
-evidence of stability, affordability and continuity. Suffering
-mitigation needs a concrete allocation question and feasible response.
-Production models remain a direction to define. The
+evidence of stability, affordability and continuity.
+Production and allocation models remain to be defined. The
 [adversarial-cooperation track](adversarial-cooperation.md) examines transition
 and incumbent interests; its protocol remains future work.
 
@@ -128,37 +127,9 @@ unmet need, affordability, worker outcomes, waste, liquidity and dependence on
 outside support. Report cases where the proposed model is infeasible or offers
 no advantage. A successful price solve does not establish store viability.
 
-## Allocation demonstration: suffering mitigation and evidence of benefit
-
-The [suffering-mitigation project](../projects/suffering-mitigation/README.md)
-investigates how limited response resources can be allocated according to human
-need and evaluated benefit. Define the available resources, competing uses,
-decision rights and allocation rule alongside the forecasting question. Compare
-with existing practice and simple needs-based rules; a more accurate forecast
-does not by itself establish a better allocation.
-
-Choose a concrete question with an observable target, population, and available
-response. Avoid treating a convenient proxy as a complete measure of suffering.
-Ask whose needs never appear in the data and why. Collect the minimum needed;
-prefer aggregate data when it can answer the question. Assess errors and
-uncertainty across relevant groups, including those with sparse observations.
-
-Design any decision or inspection rule around an available action and response
-capacity, with people who know the setting and people affected by that action.
-Explicitly define false-alarm costs, missed-need costs, review responsibility, and
-what happens when the system lacks enough evidence. Forecast confidence is only
-one input.
-
-Run the rule without affecting decisions first, inspect failures, then evaluate a
-bounded intervention with appropriate domain and community oversight. Measure
-actual benefit and unintended harm, not only how many alerts were produced.
-Forecast associations and attention maps do not identify the effects of an
-intervention or substitute for this evidence.
-
 ## Engineering work deliberately left open
 
-- Store adapter and simulator, reconciled accounts, and implementation of the
-  proposed store objective and operating workflows.
+- Live exchange integration, authenticated publication and settlement workflows.
 - Demonstration-specific exchange and allocation rules, governance protocols
   and comparisons of economic outcomes.
 - Versioned dataset schema, availability-aware preprocessing, and temporal splits.

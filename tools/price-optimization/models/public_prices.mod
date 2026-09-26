@@ -23,9 +23,39 @@ param funding_balance;
 param coverage_credit >= 0;
 param liquidity_buffer >= 0;
 
+# Only alternatives allowed by the existing per-product protections may
+# displace another price. Derive this from the raw inputs independently of
+# the C++ verifier; no caller-supplied admissibility or dominance flags.
+param locally_admissible {(i,k) in CHOICES} binary :=
+    if price[i,k] <= affordability_ceiling[i]
+       and abs(price[i,k] - previous_price[i]) * 10000
+           <= previous_price[i] * max_change_bp[i]
+       and (if funding_balance > 0 then price[i,k] - previous_price[i]
+            else if funding_balance < 0 then previous_price[i] - price[i,k]
+            else abs(price[i,k] - previous_price[i])) <= 0
+       and (forall {s in SCENARIOS} forecast_units[i,k,s] <= inventory[i])
+       and (funding_balance >= 0 or price[i,k] <= previous_price[i]
+            or (forall {s in SCENARIOS}
+                (price[i,k] - unit_cost[i]) * forecast_units[i,k,s]
+                >= (previous_price[i] - unit_cost[i])
+                    * forecast_units[i,hold_candidate[i],s]))
+    then 1 else 0;
+
 var choose {CHOICES} binary;
 subject to OnePublicPrice {i in PRODUCTS}:
     sum {k in 1..candidate_count[i]} choose[i,k] = 1;
+# Do not retain a more expensive price solely to avoid earning surplus when
+# a cheaper allowed offer serves at least as many units and contributes at
+# least as much in every supplied scenario. This preserves protected coverage
+# under replacement. The balance objective still ranks the remaining choices.
+subject to AffordableProvision {(i,k) in CHOICES:
+        exists {j in 1..candidate_count[i]:
+            locally_admissible[i,j] = 1 and price[i,j] < price[i,k]}
+        (forall {s in SCENARIOS}
+            forecast_units[i,j,s] >= forecast_units[i,k,s]
+            and (price[i,j] - unit_cost[i]) * forecast_units[i,j,s]
+                >= (price[i,k] - unit_cost[i]) * forecast_units[i,k,s])}:
+    choose[i,k] = 0;
 subject to Affordability {(i,k) in CHOICES}:
     (price[i,k] - affordability_ceiling[i]) * choose[i,k] <= 0;
 subject to PriceStability {(i,k) in CHOICES}:

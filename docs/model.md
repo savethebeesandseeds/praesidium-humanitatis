@@ -114,7 +114,5 @@ Selection and attention weights are diagnostics of this fitted model. Correlated
 features can exchange importance, and a prediction's associations do not identify
 the effect of an intervention. These outputs may inform the future query-inspection
 design, but are not yet a query-inspection interface or a causal explanation.
-Applications own the meaning and consequences of decisions made using forecasts;
-the suffering-mitigation allocation demonstration must separately evaluate
-whether its decisions and actions help people. See the tool and demonstration
-work in the [research plan](research-plan.md).
+Applications own the meaning and consequences of decisions made using forecasts
+and must separately evaluate their outcomes. See the [research plan](research-plan.md).

@@ -8,12 +8,15 @@ in the repository.
 
 `projects/` contains research demonstrations of those models. `tools/` contains
 reusable technical capabilities with independent validation and explicit
-licenses. `docs/` contains the institutional framework, research plans and
-evidence records. A tool's technical success and a demonstration's economic
+licenses. [`simulation/`](../simulation/README.md) is the home for a shared
+tycoon engine that composes project models into an inspectable visual world;
+it is currently at the initial design stage. Project-specific simulation rules
+and accounts remain with their projects. `docs/` contains the institutional
+framework, research plans and evidence records. A tool's technical success and a demonstration's economic
 or human outcomes remain separate claims.
 
 The store is an exchange demonstration with distribution and allocation
-mechanisms. Suffering mitigation is a proposed allocation demonstration.
+mechanisms.
 Production models for factories and laboratories remain future work. The
 institutional framing preserves the existing implementation, licenses and
 validation records.
@@ -34,8 +37,10 @@ See [licensing](licensing.md) for the exact boundaries and legal draft status.
 
 Canonical TFT scripts now build into `.build/temporal-fusion-transformer`.
 Historical `.build/tft` caches and outputs are preserved. Compatibility wrappers
-retain the old `code/tasks.sh`, environment launch/setup commands, and CMake
-entry; callers of source-level paths should migrate to the canonical directory.
+initially retained the old `code/tasks.sh`, environment launch/setup commands,
+and CMake entry. On 2026-09-22 the redundant `code/` wrappers were removed;
+use `tools/temporal-fusion-transformer/tasks.sh`, its `environment/` scripts,
+and its `CMakeLists.txt` directly. All implementations already live there.
 Existing verification logs still record the original paths and are not rewritten.
 The TFT container's name, image, bind mount, and device access stay as documented
 in [its environment record](environment.md).
@@ -63,10 +68,9 @@ its optional synthetic history fixture is not empirical evidence. Any later TFT
 integration must preserve those provenance distinctions and earn its use through
 past-only comparisons against simpler methods on appropriate observed data.
 
-The two demonstration directories define their purpose and integration contracts.
-They do not claim finished humanitarian interventions or a deployed autonomous
-store. [post-profit-exchange](../projects/post-profit-exchange/README.md) is the
-store application. Its [store specification](../projects/post-profit-exchange/STORE_SPECIFICATION.md)
+The [post-profit-exchange](../projects/post-profit-exchange/README.md) project is
+the store application; it does not claim a deployed autonomous store.
+Its [store specification](../projects/post-profit-exchange/STORE_SPECIFICATION.md)
 covers the intended operation: inventory, procurement, sales, accounts and
 worker benefit. Real-time price selection is one optimization decision within
 that operation. The standalone browser simulator compiles the shared pricing
@@ -76,8 +80,8 @@ Synthetic accounts and plain charts are implemented. Operational integration,
 governance and broader risk management follow later.
 
 Factory and laboratory applications belong in their own future project folders,
-with distinct operating models and appropriate shared tools. No such application
-folders are created by the store reorganization. Pricing-specific source names,
+with distinct operating models and appropriate tools. The production and
+distribution folders remain placeholders. Pricing-specific source names,
 build targets, API versions and the optimizer container still identify the
 existing pricing tool; the store project has its own name and scope.
 
@@ -91,7 +95,8 @@ workflow. The log is retained locally at
 suites were not rerun for this path-only change; prior CUDA evidence remains
 in its original verification records.
 
-The old PowerShell launcher correctly forwards to the verified TFT container.
+At migration verification time, the old PowerShell launcher correctly forwarded
+to the verified TFT container.
 The old CMake entry configured successfully with the documented CUDA profile;
 canonical scripts load that profile themselves. Nine Bash scripts, six Python
 files, and three PowerShell launchers passed syntax checks. Relative Markdown

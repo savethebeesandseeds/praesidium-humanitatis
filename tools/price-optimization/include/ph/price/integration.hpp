@@ -7,7 +7,7 @@
 namespace ph::price::integration {
 using Json = nlohmann::json;
 inline constexpr const char* kSchemaVersion = "ph.price.v3";
-inline constexpr const char* kModelVersion = "public-prices.v3";
+inline constexpr const char* kModelVersion = "public-prices.v4";
 inline constexpr const char* kObjectiveId = "operating_balance_tracking";
 inline constexpr std::size_t kMaxJsonBytes = 8 * 1024 * 1024;
 

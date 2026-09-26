@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-Praesidium-Humanitatis-Worker-Protection-1.0
 cmake_minimum_required(VERSION 3.25)
-project(praesidium_price_optimization VERSION 0.4.0 LANGUAGES CXX)
+project(praesidium_price_optimization VERSION 0.5.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)

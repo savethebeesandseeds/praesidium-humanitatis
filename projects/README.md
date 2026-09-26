@@ -12,7 +12,6 @@ by the repository's root `LICENSE`. Dependencies retain their own terms.
 | Project | Economic areas and purpose | Reusable tool | Current state |
 | --- | --- | --- | --- |
 | [post-profit-exchange](post-profit-exchange/README.md) | **Exchange**, with **distribution** and **allocation**: investigate a self-sufficient store under worker control, without passive-owner profit extraction | MIT [simple exponential smoothing baseline](../tools/exponential-smoothing/README.md); separately licensed price optimizer with AMPL and bounded offline backends | Standalone C++/WebAssembly simulation, plain charts and reconciled synthetic accounts; live operation remains future work |
-| [Suffering mitigation](suffering-mitigation/README.md) | **Allocation**: investigate how evidence of human need can inform limited response resources and evaluate actions that reduce suffering | MIT Temporal Fusion Transformer | Research definition; allocation rules and intervention evaluation remain open; forecasting validation is a separate gate |
 | [post-profit-assurance](post-profit-assurance/README.md) | **Allocation** and continuity: research collectively governed support for productive units facing resource shortfalls | Proposed `exchange.assurance.v1` event boundary | Specification placeholder and unfunded exchange events only; no receiver, funded pool or payouts |
 
 Every demonstration must identify its hypothesis, participants, governance,
@@ -30,6 +29,12 @@ price decisions for the application to evaluate and apply.
 Applications consume versioned tool interfaces. Store workflows and dashboard
 code belong in the store project; reusable solving, validation and model code
 belong in the tool. Tools must not depend on application code.
+
+The shared [`simulation/`](../simulation/README.md) tycoon engine will compose
+these models into a visual world. Map rendering, camera controls and world
+inspection belong there; project-specific operating rules and accounts stay
+with their projects. The existing exchange simulator remains here as the
+store's economic implementation, usable independently of the shared engine.
 
 Factories and laboratories are prospective **production** demonstrations with
 their own specifications, reusing tools where appropriate. The production,

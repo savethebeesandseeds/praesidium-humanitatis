@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Praesidium-Humanitatis-Worker-Protection-1.0 -->
 
-The dashboard integration uses `ph.price.v3`, engine `0.4.0`, model `public-prices.v3`, and objective `operating_balance_tracking` version `1`. Prices respond to a supplied, reconciled funding balance: positive permits decreases or holding, negative permits contribution-preserving increases or holding, and zero requires holding. Separately supplied operating liquidity can fund forecast shortfalls without becoming earned income or changing that direction. The engine does not maintain the store ledger, authenticate policy, estimate demand or publish prices. A policy identifier is a caller-supplied audit label, not authenticated worker consent.
+The dashboard integration uses `ph.price.v3`, engine `0.5.0`, model `public-prices.v4`, and objective `operating_balance_tracking` version `2`. Prices respond to a supplied, reconciled funding balance: positive permits decreases or holding, negative permits contribution-preserving increases or holding, and zero requires holding. Separately supplied operating liquidity can fund forecast shortfalls without becoming earned income or changing that direction. The engine does not maintain the store ledger, authenticate policy, estimate demand or publish prices. A policy identifier is a caller-supplied audit label, not authenticated worker consent.
 
 ## Request
 
@@ -25,13 +25,13 @@ All fields below are required. Unknown fields are rejected at every object level
 | `feedback.funding_balance` | Signed reconciled operating funding balance, or an explicitly amortized control adjustment derived from it. Positive means ahead of required funding; negative means a shortfall. |
 | `feedback.coverage_credit` | Nonnegative, independently established cash-backed earned funding available to cover this horizon. Must be zero when `funding_balance <= 0`. It supports coverage and does not replace the signed balance in the objective. |
 | `feedback.liquidity_buffer` | Nonnegative additional spendable operating cash, disjoint from `coverage_credit`. Available at any funding-balance sign; it may originate in initial assets. It funds continuity without becoming earned balance, discount entitlement, or objective income. |
-| `objective` | Exactly `{ "id": "operating_balance_tracking", "version": 1 }`. |
+| `objective` | Exactly `{ "id": "operating_balance_tracking", "version": 2 }`. |
 
 Policy, unit costs, and forecasts join by SKU and candidate price, independently of their input array order. Missing, extra, and duplicate matches are errors. Catalog order determines result product order; candidate indices are zero-based within that catalog product's `candidate_prices` array. Forecast scenario order is significant and preserved.
 
 JSON text is limited to 8 MiB and 32 nested containers. Duplicate object keys, including escaped equivalents, malformed JSON, nonfinite/overflowing numbers, and trailing JSON values are rejected. Engine bounds also apply: at most 256 products, 64 candidates per product and 32 scenarios; individual prices, costs and fixed obligations at most 1,000,000,000 minor units; quantities at most 1,000,000 units; and bounded aggregate arithmetic. `funding_balance` is bounded by ±2^50; each of `coverage_credit` and `liquidity_buffer` is bounded by 0 through 2^50. The caller must establish their accounting basis and disjoint spendable cash amounts. Do not count the same cash in both fields, count inventory as cash, or include cash already committed elsewhere. Type and range validation cannot prove that funds exist. Reference labels are not AMPL instructions.
 
-Version 1 and version 2 requests are not silently migrated: callers must supply all three feedback fields, the current schema/objective identifiers, and forecasts for every hold candidate. The engine has no discretionary surplus target or static basket-price objective.
+Schema `ph.price.v1` and `ph.price.v2` requests are not silently migrated. The JSON shape remains `ph.price.v3`, but objective version `1` is rejected: callers must explicitly request objective version `2`, supply all three feedback fields, and provide forecasts for every hold candidate. The engine has no discretionary surplus target or static basket-price objective.
 
 `synthetic_request_json(now)` produces the bread-and-beans evaluation fixture with current timestamps. Its forecast source explicitly identifies synthetic data. It supplies no empirical demand, operational authorization, or approved store policy.
 
@@ -83,7 +83,7 @@ The complete synthetic request below illustrates every required field. The fixed
       {"sku": "beans", "price": 330, "units": [8, 5]}
     ]
   },
-  "objective": {"id": "operating_balance_tracking", "version": 1}
+  "objective": {"id": "operating_balance_tracking", "version": 2}
 }
 ```
 
@@ -100,14 +100,19 @@ For success, C++ independently checks the selected indices against the retained,
 - `recommendation.scenarios[]`: scenario ID and probability, total revenue, unit cost total, contribution, worker wages, operating cost, reserve contribution, remaining `worker_surplus`, and `funding_balance` equal to input funding balance plus that surplus.
 - `recommendation.expected`: probability-weighted revenue, costs, contribution and worker surplus, plus the minimized `absolute_funding_balance`. Expected values use floating point because scenario probabilities are floating point; all hard constraints and individual scenario monetary amounts use exact integers. Weights are used as supplied, without silent normalization. Expected worker surplus remains a financial diagnostic, not the objective.
 - `recommendation.feedback`: supplied `funding_balance`, `coverage_credit`, `liquidity_buffer`, and `direction` (`down_or_hold`, `up_or_hold`, or `hold`).
-- `local_candidate_exclusions`: candidate index, price, SKU and reason codes for candidates that independently violate `affordability_ceiling`, `price_change_cap`, `inventory` (with scenario ID), `feedback_direction`, or `increase_reduces_contribution` (with scenario ID). Candidates omitted from this list may be feasible but suboptimal, or may fail portfolio coverage in combination. The explicit scope is `local_candidate_constraints_only` and `global_infeasibility_explanation` is `false`. This is not an exhaustive explanation of optimization choices.
+- `local_candidate_exclusions`: candidate index, price, SKU and reason codes for candidates that violate `affordability_ceiling`, `price_change_cap`, `inventory` (with scenario ID), `feedback_direction`, `increase_reduces_contribution` (with scenario ID), or `affordable_alternative` (with `alternative_candidate_index` and `alternative_price`). The last reason identifies a locally legal cheaper candidate satisfying the comparison below. Candidates omitted from this list may be feasible but suboptimal, or may fail portfolio coverage in combination. The explicit scope is `local_candidate_constraints_only` and `global_infeasibility_explanation` is `false`. This is not an exhaustive explanation of optimization choices.
 
 For supplied funding balance `B`, earned coverage credit `C`, disjoint additional operating liquidity `L`, and scenario surplus `m_s` after unit costs, protected wages, operations and this horizon's reserve requirement, the formulation is:
 
 ```text
 minimize sum_s probability_s * abs(B + m_s)
 subject to m_s + C + L >= 0 in every scenario
+and the local price, inventory, direction and affordable-alternative rules
 ```
+
+A candidate is excluded if another candidate for the **same SKU** is strictly cheaper, otherwise locally legal, and has both at least as many forecast units and at least as much contribution `(price - unit_cost) * units` in **every supplied scenario**. The alternative must pass affordability, change-cap, inventory, feedback-direction and safe-increase checks. Replacing the higher price therefore cannot worsen modeled portfolio coverage. The rule applies at every balance sign without relaxing price direction. It does not require selecting the cheapest feasible basket or resolve tradeoffs across products or scenarios.
+
+The balance objective applies among the remaining candidates. Its score may be larger than with objective version 1: a more affordable offer can generate more surplus and must no longer be rejected for that reason alone. For a supplied one-scenario example with unit cost 100 cents, fixed requirements 400 and `B = 1000`, price 200 forecasting 10 purchases gives surplus 600 and score 1600; price 160 forecasting 30 gives surplus 1400 and score 2400. When both pass the other rules, version 2 excludes price 200 and selects 160. This is a deterministic forecast fixture, not observed consumer behavior.
 
 The reported score is the expected absolute balance, not the absolute value of expected balance: positive and negative scenario deviations cannot cancel. Positive `B` restricts every price to at most its previous price; negative `B` restricts every price to at least its previous price; zero `B` requires the previous prices. When `B < 0`, an increase is also forbidden if `(candidate_price - unit_cost) * forecast_units` is lower than the hold candidate's contribution in any scenario. A price rise therefore must preserve forecast contribution in every supplied scenario, but the model does not guarantee recovery of a realized shortfall.
 
@@ -126,7 +131,7 @@ The following reported constraints include integer `slack` and `binding: (slack 
 | `products[i].scenarios[s].inventory` | `inventory - forecast_units`, in whole units. |
 | `scenarios[s].coverage` | `worker_surplus + feedback.coverage_credit + feedback.liquidity_buffer`, in minor currency units. A negative scenario surplus can be covered by the two caller-established disjoint cash sources. |
 
-A binding flag means a selected solution lies on that constraint's boundary. It is not a dual price, sensitivity estimate, or proof that the constraint determined the optimum. The model supplies no deterministic tie-breaking guarantee. The snapshot and version/hash metadata support replay and audit; they do not imply that another solver build will choose identical prices when multiple optima exist.
+A binding flag means a selected solution lies on that constraint's boundary. It is not a dual price, sensitivity estimate, or proof that the constraint determined the optimum. A cheaper alternative with equal contribution and no fewer purchases excludes the higher price regardless of candidate order. For remaining incomparable choices, enumeration retains original candidate-index order on equal scores; AMPL supplies no general deterministic tie-breaking guarantee. The snapshot and version/hash metadata support replay and audit; they do not imply that another solver build will choose identical prices when multiple optima exist.
 
 For the synthetic selection `[1, 1]`, bread is 200 cents and beans 300 cents. Zero input funding balance requires these held prices. Usual-scenario revenue is 6,800, unit costs 3,400, protected wages 800, operating cost 100, reserve 100, leaving 2,400. Low-demand surplus is 1,400. At probabilities 0.6 and 0.4, expected surplus and expected absolute funding balance both equal 2,000 in this example. They are different measures in general. Bread's 240-cent candidate violates affordability, price-change and zero-balance hold rules. None of these supplied forecasts is an observed store outcome.
 

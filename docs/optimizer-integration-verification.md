@@ -1,10 +1,12 @@
 # Optimizer dashboard integration — 2026-09-20
 
-Historical v1 evidence. The current `ph.price.v3` / `public-prices.v3` feedback
-and liquidity contract supersedes the objective described below. All counts,
-hashes and scope statements in this record describe that earlier snapshot;
-see the [current exchange verification](exchange-simulation-verification.md)
-and [current contract](../tools/price-optimization/docs/contract.md).
+Historical v1 evidence. All counts, hashes and scope statements below describe
+the earlier snapshot, not checks of the current policy. The
+[current contract](../tools/price-optimization/docs/contract.md) uses schema
+`ph.price.v3`, model `public-prices.v4`, engine `0.5.0` and objective
+`operating_balance_tracking` version 2, including the affordable-alternative
+protection. The [exchange verification record](exchange-simulation-verification.md)
+also preserves evidence from before that protection.
 
 Goal: make the existing price optimizer callable by a synthetic store dashboard
 through a versioned input/result contract, bounded execution with cancellation,

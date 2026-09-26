@@ -1,10 +1,12 @@
 # Price optimization verification — 2026-09-20
 
-Historical v1 evidence. The current `ph.price.v3` / `public-prices.v3` feedback
-and liquidity contract supersedes the objective described below. All counts,
-hashes and scope statements in this record describe that earlier snapshot;
-see the [current exchange verification](exchange-simulation-verification.md)
-and [current contract](../tools/price-optimization/docs/contract.md).
+Historical v1 evidence. All counts, hashes and scope statements below describe
+the earlier snapshot, not checks of the current policy. The
+[current contract](../tools/price-optimization/docs/contract.md) uses schema
+`ph.price.v3`, model `public-prices.v4`, engine `0.5.0` and objective
+`operating_balance_tracking` version 2, including the affordable-alternative
+protection. The [exchange verification record](exchange-simulation-verification.md)
+also preserves evidence from before that protection.
 
 The later dashboard boundary has its own
 [integration verification record](optimizer-integration-verification.md),
@@ -119,6 +121,6 @@ No prices were published. `dpkg --audit` reported no package problems.
 
 Operational use still requires an entitlement suitable for that deployment.
 
-The current checks establish neither legal license compliance nor real-world
+These historical checks establish neither legal license compliance nor real-world
 affordability, forecast accuracy, self-sufficiency, latency guarantees, or worker
 control. The model has no live store connection and does not publish prices.

@@ -15,18 +15,11 @@ forecasting uses.
 
 ## Tool research and demonstration use
 
-- **Standalone engine:** develop forecasting and query inspection with explicit
-  interfaces, reproducible experiments, and comparisons against simpler methods.
-  Keep domain-specific targets and response rules outside the reusable core.
-- **Allocation demonstration:** the
-  [suffering-mitigation project](../../projects/suffering-mitigation/README.md)
-  investigates how evidence of human need can inform limited response
-  resources. Refine this with people who know the setting and those affected.
-  Forecast performance, allocation quality and evidence that an intervention
-  helps people are separate outcomes.
+Develop forecasting and query inspection with explicit interfaces, reproducible
+experiments, and comparisons against simpler methods. Keep domain-specific
+targets and response rules outside the reusable core.
 
-The demonstration can inform the engine without defining its entire scope or
-being a prerequisite for technical progress. See the
+No application integration is required for this validation work. See the
 [research plan](../../docs/research-plan.md) for its place in the wider program.
 
 The current priority is [TFT replication and validation](../../docs/tft-replication.md).
@@ -157,10 +150,6 @@ tasks.sh                           build/test/demo operations
 - After that gate, define query inspection through concrete input/output examples
   before choosing an interface or implementation. Forecast diagnostics already
   exist; they do not by themselves implement query inspection.
-- After validating the forecasting foundation, develop forecast-based use in
-  the suffering-mitigation allocation demonstration, with its own target, data,
-  resource constraints, decision rules, feasible response and evaluation of
-  benefit. Its domain-specific decisions belong in the application layer.
 
 [Experiments](../../docs/experiments.md) · [Research plan](../../docs/research-plan.md)
 · [Verification record](../../docs/verification.md)

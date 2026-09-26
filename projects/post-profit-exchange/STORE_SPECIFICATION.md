@@ -95,6 +95,7 @@ m_s = forecast_sales_contribution_s - fixed_wages - fixed_operations
 g_s = b + m_s
 minimize sum_s probability_s * abs(g_s)
 subject to m_s + C + L >= 0, for every scenario
+and the local price, inventory, direction and affordable-alternative rules
 ```
 
 `C` is separately established, cash-backed earned funding available for coverage.
@@ -117,6 +118,12 @@ Every SKU also obeys these hard rules:
   the hold candidate's contribution in every supplied scenario.
 - `b == 0`: hold. Day one therefore uses the configured reference prices to
   collect actual operating evidence.
+- Exclude a candidate if an otherwise locally legal, strictly cheaper candidate
+  for the same SKU has at least as many forecast purchases and at least as much
+  contribution in every supplied scenario. The alternative must itself obey
+  affordability, change-cap, inventory, direction and safe-increase rules.
+  This cannot worsen modeled coverage and applies without changing the direction
+  rules above. It makes no comparison of tradeoffs across SKUs or scenarios.
 
 The candidate grid must contain the previous price and its scenario forecasts.
 Affordability, price-change and inventory constraints still apply. They can block
@@ -125,14 +132,23 @@ a funding gap is not a promise that increasing prices can recover it. Reductions
 also depend on feasible coverage and inventory. The objective cannot assume
 demand that the supplied scenarios do not support.
 
+The balance objective applies after the affordable-alternative protection. Its
+score can be higher than under the previous rule: a cheaper offer may serve more
+people and generate more surplus. Extra surplus alone must not disqualify it
+when contribution and forecast purchases are no worse in any scenario. This
+is not a general cheapest-feasible-price objective or evidence of actual demand.
+
 Expected absolute balance differs from the absolute value of expected balance:
 opposite scenario deviations cannot cancel. Report signed scenario balances,
 the absolute score, coverage slack and realized history separately. Expected
 worker surplus remains a diagnostic, not the optimization objective. The model
-does not guarantee a deterministic tie choice across solver builds.
+does not guarantee a deterministic tie choice across solver builds for remaining
+incomparable choices. Cheaper equal-contribution alternatives with no fewer
+forecast purchases exclude the higher price independently of candidate order.
 
-The server contract is `ph.price.v3`, engine `0.4.0`, model `public-prices.v3`,
-with objective `{id: "operating_balance_tracking", version: 1}`. Its required
+The server contract is `ph.price.v3`, engine `0.5.0`, model `public-prices.v4`,
+with objective `{id: "operating_balance_tracking", version: 2}`. The JSON shape
+is unchanged, but requests for objective version 1 are rejected. Its required
 `feedback` object carries `funding_balance: b`, `coverage_credit: C` and `liquidity_buffer: L`.
 `recommendation.expected.absolute_funding_balance` is the minimized score;
 each scenario's `funding_balance` is `b + m_s` and coverage slack is `m_s + C + L`.

@@ -62,17 +62,14 @@ technical checks can guarantee prevention of misuse. See the precise
 
 ## Research demonstrations
 
-1. [post-profit-exchange](projects/post-profit-exchange/README.md): a
-   proposed store demonstration centered on **exchange** through public pricing,
-   with **distribution** through stock and procurement and **allocation** through inventory, protected
-   budgets and worker-governed surplus. Its scope includes stock, procurement,
-   sales, accounts and worker benefit. A [standalone C++/WebAssembly simulator](projects/post-profit-exchange/dist/post-profit-exchange.html)
-   provides plain controls, charts and reconciled accounts. Live integration
-   and evaluation with observed operating data remain future work.
-2. [Suffering mitigation](projects/suffering-mitigation/README.md): a proposed
-   **allocation** demonstration investigating how evidence of human need can
-   inform the use of limited response resources. Forecasting validation,
-   allocation rules and evaluation of actual benefit remain separate work.
+[post-profit-exchange](projects/post-profit-exchange/README.md) is a store
+research demonstration centered on **exchange** through public pricing, with
+**distribution** through stock and procurement and **allocation** through
+inventory, protected budgets and worker-governed surplus. Its scope includes
+stock, procurement, sales, accounts and worker benefit. A
+[standalone C++/WebAssembly simulator](projects/post-profit-exchange/dist/post-profit-exchange.html)
+provides plain controls, charts and reconciled accounts. Live integration and
+evaluation with observed operating data remain future work.
 
 Future factory and laboratory demonstrations can investigate **production**
 and its connections to the other areas, with their own operating models and
@@ -89,6 +86,16 @@ estimator, payment system, and hard real-time service are not implemented.
 A [supervised JSON backend](tools/price-optimization/docs/backend.md) now exposes
 the existing optimizer for the synthetic dashboard example, with versioned
 inputs, process deadlines/cancellation and independently checked explanations.
+
+## Tycoon simulation engine
+
+[`simulation/`](simulation/README.md) is the home for our own tycoon engine:
+a visual world connecting workplaces, stores, households and supply routes
+to the post-profit-economic models. It will own the shared world, rendering,
+time controls and inspection, while projects define the economic rules.
+The initial design starts with replaying the existing store simulation on a
+small map; a runnable graphical engine and interactive world-building are
+future work.
 
 ## Build and environments
 
@@ -119,9 +126,10 @@ For the existing TFT environment, from PowerShell:
 .\tools\temporal-fusion-transformer\environment\container.ps1 -Action exec -Command @('bash', 'tools/temporal-fusion-transformer/tasks.sh', 'test')
 ```
 
-See the [TFT environment](docs/environment.md) for exact dependencies. The old
-`code/tasks.sh` and `code/environment/` entry points forward to the TFT tool.
-Existing build artifacts are preserved; canonical TFT builds now use
+See the [TFT environment](docs/environment.md) for exact dependencies. Use
+`tools/temporal-fusion-transformer/tasks.sh` and
+`tools/temporal-fusion-transformer/environment/` for TFT tasks and setup.
+Existing build artifacts are preserved; canonical TFT builds use
 `.build/temporal-fusion-transformer`.
 
 ## Layout
@@ -133,13 +141,13 @@ tools/
   temporal-fusion-transformer/        MIT forecasting library, tests, environment
   price-optimization/                 restricted engine, AMPL model, tests, environment
 projects/
-  suffering-mitigation/               proposed allocation demonstration (MIT)
   post-profit-exchange/               store simulation, specification, standalone HTML (MIT application)
   post-profit-distribution/           preserved research placeholder
   post-profit-production/             research placeholder
   post-profit-allocation/             research placeholder
+  post-profit-assurance/              continuity-support contract placeholder; no funded payouts
+simulation/                          shared tycoon engine; initial design and integration plan
 docs/                                institutional framework, research, validation, licensing
-code/                                MIT compatibility entry points for old TFT commands
 .build/                              ignored dependencies, results, build outputs
 .temp/                               ignored downloads and local working files
 ```

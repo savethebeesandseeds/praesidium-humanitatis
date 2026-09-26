@@ -163,6 +163,61 @@ models::ProductPrior prior(const Json& product) {
       static_cast<int>(value(product, "base_demand")), static_cast<int>(value(product, "elasticity_bps"))};
 }
 Json empty_history() { return {{"schema_version", "exchange.history.v1"}, {"observations", Json::array()}}; }
+// Explain one product's candidate at a time against the published basket.
+// This is forecast evidence, including for infeasible/continuity prices; it
+// neither selects prices nor changes any accounting or optimizer score.
+void explain_prices(const ph::price::Request& request, const std::vector<Amount>& prices,
+                    Json& product_rows) {
+  std::vector<std::size_t> published_indices;
+  std::vector<Amount> basket_contribution(request.scenarios.size(), 0);
+  for (std::size_t i = 0; i < request.products.size(); ++i) {
+    const auto& product = request.products[i];
+    const auto published = std::find_if(product.candidates.begin(), product.candidates.end(),
+        [&](const ph::price::Candidate& candidate) { return candidate.price == prices[i]; });
+    if (published == product.candidates.end()) throw std::logic_error("published price has no forecast candidate");
+    published_indices.push_back(static_cast<std::size_t>(published - product.candidates.begin()));
+    for (std::size_t s = 0; s < request.scenarios.size(); ++s)
+      basket_contribution[s] += (published->price - product.unit_cost) * published->forecast_units[s];
+  }
+  const Amount required = request.worker_wage_floor + request.operating_cost + request.reserve_floor;
+  for (std::size_t i = 0; i < request.products.size(); ++i) {
+    const auto& product = request.products[i];
+    const auto& published = product.candidates[published_indices[i]];
+    auto indices = published_indices;
+    for (std::size_t k = 0; k < product.candidates.size(); ++k) {
+      const auto& candidate = product.candidates[k];
+      indices[i] = k;
+      // Reuse the authoritative exact checks, including the affordable-offer
+      // guard and whole-exchange coverage; the UI must not reimplement policy.
+      const auto checked = ph::price::evaluate_selection(request, indices, request.as_of);
+      const auto cheaper = ph::price::affordable_alternative(request, product, k);
+      std::vector<Amount> contributions, balances;
+      long double units = 0, contribution = 0, balance = 0, score = 0;
+      Amount minimum_coverage = std::numeric_limits<Amount>::max();
+      for (std::size_t s = 0; s < request.scenarios.size(); ++s) {
+        const Amount candidate_contribution = (candidate.price - product.unit_cost) * candidate.forecast_units[s];
+        const Amount total = basket_contribution[s] -
+            (published.price - product.unit_cost) * published.forecast_units[s] + candidate_contribution;
+        const Amount surplus = total - required;
+        const Amount remaining = request.funding_balance + surplus;
+        const long double probability = request.scenarios[s].probability;
+        contributions.push_back(candidate_contribution); balances.push_back(remaining);
+        units += probability * candidate.forecast_units[s];
+        contribution += probability * candidate_contribution;
+        balance += probability * remaining; score += probability * std::abs(remaining);
+        minimum_coverage = std::min(minimum_coverage, surplus + request.coverage_credit + request.liquidity_buffer);
+      }
+      product_rows[i]["candidate_forecasts"][k]["price_comparison"] = {
+          {"expected_units", static_cast<double>(units)}, {"expected_contribution", static_cast<double>(contribution)},
+          {"scenario_contribution", contributions}, {"scenario_funding_balance", balances},
+          {"expected_funding_balance", static_cast<double>(balance)}, {"hypothetical_balance_score", static_cast<double>(score)},
+          {"minimum_coverage_slack", minimum_coverage}, {"admissible", checked.recommendation.has_value()},
+          {"exclusion_reasons", checked.validation.errors},
+          {"affordable_alternative_price", cheaper ? Json(product.candidates[*cheaper].price) : Json(nullptr)},
+          {"published", k == published_indices[i]}};
+    }
+  }
+}
 void validate_history(const Json& history, const Json& config) {
   fields(history, {"schema_version", "observations"}, "history");
   if (history.at("schema_version") != "exchange.history.v1") bad("unsupported history schema");
@@ -330,6 +385,7 @@ Json path(const Json& config, bool optimized, const Json& history) {
       break;
     }
     std::vector<Amount> prices = recommended ? solved.recommendation->public_prices : previous;
+    explain_prices(request, prices, product_rows);
     // A declared application continuity rule keeps valid public prices operating.
     // This is not a solver recommendation and does not claim that forecast coverage was satisfied.
     if (recommended) ++successful; else ++continuity_days;
@@ -446,6 +502,7 @@ Json simulate(const Json& config, const Json& history) {
     comparison[key] = value(optimized.at("summary"), key) - value(fixed.at("summary"), key);
   return {{"schema_version", schema}, {"status", "ok"}, {"config", config}, {"history", history},
       {"engine", "bounded_enumeration_of_feedback_price_model"}, {"objective", "operating_balance_tracking"},
+      {"objective_version", ph::price::kObjectiveVersion},
       {"forecast_cost_basis", "current_replacement_cost"}, {"realized_cost_basis", "FIFO"},
       {"optimized", optimized}, {"fixed", fixed}, {"comparison", {{"optimized_minus_fixed", comparison},
         {"equal_observed_horizons", optimized.at("rows").size() == fixed.at("rows").size()}}},

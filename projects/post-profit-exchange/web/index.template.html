@@ -11,44 +11,36 @@
 <body>
   <header>
     <h1>post-profit-exchange</h1>
-    <p><strong>C++ / WebAssembly — bounded exact solver (not AMPL)</strong></p>
-    <p>Offline research simulation of a store within the exchange. Synthetic demand and costs; no live prices or payments.</p>
-    <p>The balancing feedback policy responds to actual sales: when accumulated operating contribution is ahead of its funding requirement, prices can fall; when it is short, prices can rise only where forecasts show that raising them helps cover the gap. Fixed worker pay and operating costs are inputs. Forecasting learns from past uncensored sales. Configurable sigma stress informs reserves. Shortfalls produce unfunded Continuity Assurance request records; cash exhaustion ends a path. The fixed-price comparison uses the same consumer draws.</p>
-    <nav aria-label="Page sections"><a href="#configuration">Configuration</a> · <a href="#results">Results</a> · <a href="#daily-ledger">Daily ledger</a> · <a href="#day-detail">Day detail</a> · <a href="#licenses">Licenses</a></nav>
+    <p>Offline research simulation: prices respond to the exchange’s funding needs. Synthetic customers and costs; no live prices or payments.</p>
+    <nav aria-label="Page sections"><a href="#configuration">Settings</a><a href="#simulation">Run</a><a href="#results">Overview</a><a href="#day-detail">Day detail</a><a href="#daily-ledger">Ledger</a></nav>
   </header>
   <main>
-    <section aria-labelledby="controls-heading">
-      <h2 id="controls-heading">Simulation</h2>
-      <div class="actions">
-        <button type="button" id="step">Step one day</button>
-        <button type="button" id="run">Run all days</button>
-        <button type="button" id="stop" disabled>Stop</button>
-        <button type="button" id="reset">Reset results</button>
-        <button type="button" id="defaults">Restore defaults</button>
-        <button type="button" id="export-json" disabled>Export JSON</button>
-        <button type="button" id="export-csv" disabled>Export CSV</button>
-      </div>
-      <p id="status" role="status" aria-live="polite">Ready. Choose Step one day or Run all days.</p>
-      <p class="note">Step replays days 1 through the selected day with the same seed. Stop terminates the worker; it preserves the last completed result. All money is in integer minor currency units (cents for EUR/USD); 10,000 basis points = 1×.</p>
-      <pre id="error" role="alert" hidden></pre>
-    </section>
     <section id="configuration" aria-labelledby="configuration-heading">
-      <h2 id="configuration-heading">Configuration</h2>
-      <p><label>Open central .cfg <input id="load-cfg" type="file" accept=".cfg,application/json"></label>
-      <label>Open history records .json <input id="load-history" type="file" accept=".json,application/json"></label>
-      <button id="export-cfg" type="button">Export .cfg and history</button></p>
-      <p id="file-state">Example configuration; no history loaded.</p>
+      <details id="configuration-panel" open>
+      <summary id="configuration-heading">1. Settings</summary>
+      <p class="note">The default example loads and runs automatically. Change any setting, then run again. Money is in cents; 10,000 basis points = 1×.</p>
       <form id="config-form">
-        <fieldset><legend>Horizon, cash, fixed daily obligations, and feedback</legend><div class="fields" id="global-fields"></div></fieldset>
-        <fieldset><legend>Consumers: visits, budgets and purchase choices</legend><div class="fields" id="consumers-fields"></div></fieldset>
-        <fieldset><legend>Forecasting and sigma stress</legend><div class="fields" id="forecast-fields"></div></fieldset>
-        <fieldset><legend>Post-Profit Continuity Assurance</legend><div class="fields" id="assurance-fields"></div></fieldset>
-        <fieldset><legend>Shock</legend><p class="note">Days are numbered from 1; use start = 0 and end = 0 to disable. Factors of 10,000 leave demand and unit cost unchanged.</p><div class="fields" id="shock-fields"></div></fieldset>
-        <fieldset><legend>Forecast scenarios (exactly three)</legend><p class="note">Probabilities must be positive and sum to one. Sigma offsets multiply the configured sigma margin around the history-based forecast; these weights are declared stress assumptions.</p><div class="table-scroll"><table id="scenario-table"><thead><tr><th scope="col">Scenario ID</th><th scope="col">Sigma offset (basis points)</th><th scope="col">Probability</th></tr></thead><tbody></tbody></table></div></fieldset>
+        <details class="settings-group" open><summary>Run, cash, daily costs and feedback</summary><fieldset><legend class="visually-hidden">Horizon, cash, fixed daily obligations, and feedback</legend><div class="fields" id="global-fields"></div></fieldset></details>
+        <details class="settings-group"><summary>Customers — visits, budgets and purchase choices</summary><fieldset><legend class="visually-hidden">Consumers: visits, budgets and purchase choices</legend><div class="fields" id="consumers-fields"></div></fieldset></details>
+        <details class="settings-group"><summary>Forecasting — past sales and uncertainty</summary><fieldset><legend class="visually-hidden">Forecasting and sigma stress</legend><div class="fields" id="forecast-fields"></div></fieldset></details>
+        <details class="settings-group"><summary>Continuity Assurance — request thresholds</summary><fieldset><legend class="visually-hidden">Post-Profit Continuity Assurance</legend><div class="fields" id="assurance-fields"></div></fieldset></details>
+        <details class="settings-group"><summary>Shock — temporary demand or cost changes</summary><fieldset><legend class="visually-hidden">Shock</legend><p class="note">Days are numbered from 1; use start = 0 and end = 0 to disable. Factors of 10,000 leave demand and unit cost unchanged.</p><div class="fields" id="shock-fields"></div></fieldset></details>
+        <details class="settings-group"><summary>Forecast scenarios — three stress assumptions</summary><fieldset><legend class="visually-hidden">Forecast scenarios (exactly three)</legend><p class="note">Probabilities must be positive and sum to one. Sigma offsets multiply the configured sigma margin around the history-based forecast; these weights are declared stress assumptions.</p><div class="table-scroll"><table id="scenario-table"><thead><tr><th scope="col">Scenario ID</th><th scope="col">Sigma offset (basis points)</th><th scope="col">Probability</th></tr></thead><tbody></tbody></table></div></fieldset></details>
         <div class="section-title"><h3>Products (1–12)</h3><button type="button" id="add-product">Add product</button></div>
         <div id="product-fields"></div>
       </form>
+      <div class="config-resources">
+      <details class="file-settings"><summary>Configuration files and history</summary>
+        <div class="file-controls">
+          <label>Open central .cfg <input id="load-cfg" type="file" accept=".cfg,application/json"></label>
+          <label>Open history records .json <input id="load-history" type="file" accept=".json,application/json"></label>
+          <button id="export-cfg" type="button">Export .cfg and history</button>
+        </div>
+        <p id="file-state">Example configuration; no history loaded.</p>
+      </details>
       <details id="assumptions"><summary>Demand formula, day order, and accounting assumptions</summary>
+        <p>The balancing feedback policy responds to actual sales: when accumulated operating contribution is ahead of its funding requirement, prices can fall; when it is short, prices can rise only where forecasts show that raising them helps cover the gap. Fixed worker pay and operating costs are inputs. Forecasting learns from past uncensored sales. Configurable sigma stress informs reserves. Shortfalls produce unfunded Continuity Assurance request records; cash exhaustion ends a path. The fixed-price comparison uses the same consumer draws.</p>
+        <p>Step replays days 1 through the selected day with the same seed. Stop terminates the worker and preserves the last completed result. The standalone implementation uses C++ / WebAssembly and a bounded exact solver, not AMPL.</p>
         <p>Consumers are a standalone synthetic model: potential visitors choose visit/skip; visiting consumers draw budgets, product needs and binary-logit purchase/no-purchase decisions. Purchases are limited by budgets and stock. Product order affects budget allocation. The coefficients are configured research assumptions, not measurements of real customers.</p>
         <p>The simple exponential smoothing tool (EWMA) forecasts from past price-normalized, uncensored sales. The example starts with empty history and configured demand/error assumptions; no real store observations are supplied. During a run it learns only from past synthetic sales. Every observation is scored before learning. Cold-start status, sigma, prediction bands and forecast errors are inspectable in the day records. Seven eligible observations set a configurable warmup flag; that flag does not establish forecasting accuracy. TFT is a separate tool and is not trained or used here.</p>
         <p>Customers and forecasts share configured price-response assumptions. Forecasts never see future choices or upcoming demand shocks, but success against this simulator is still conditional on those shared assumptions. It does not measure accuracy against real customers or identify the causal effect of changing prices.</p>
@@ -58,22 +50,60 @@
         <p>All operation settings and products are configurable. The native runner loads the central JSON-formatted .cfg and its history JSON, then writes new JSON records without a database. In this standalone page, select both files explicitly; it cannot silently access neighboring files. Export preserves the configuration, history and result.</p>
       </details>
       <details id="json-editor"><summary>Edit configuration as JSON (optional)</summary><p>The controls above expose every setting. Loading JSON updates those controls.</p><textarea id="config-json" rows="14" spellcheck="false" aria-label="Configuration JSON"></textarea><div class="actions"><button type="button" id="refresh-json">Copy controls into editor</button><button type="button" id="load-json">Load editor into controls</button></div></details>
+      </div>
+      </details>
+    </section>
+    <section id="simulation" aria-labelledby="controls-heading">
+      <h2 id="controls-heading">2. Run simulation</h2>
+      <p id="config-overview" class="note">Loading configuration.</p>
+      <div class="control-groups">
+        <div class="control-group" role="group" aria-label="Run controls">
+          <span class="control-label">Simulate</span>
+          <div class="actions">
+            <button type="button" id="run" class="primary-button">Run all days</button>
+            <button type="button" id="step" class="step-button">Step one day</button>
+            <button type="button" id="stop" disabled>Stop</button>
+          </div>
+        </div>
+        <div class="control-group" role="group" aria-label="Reset controls">
+          <span class="control-label">Start again</span>
+          <div class="actions secondary-actions">
+            <button type="button" id="reset">Reset results</button>
+            <button type="button" id="defaults">Restore defaults &amp; run</button>
+          </div>
+        </div>
+        <div class="control-group" role="group" aria-label="Export results">
+          <span class="control-label">Save results</span>
+          <div class="actions secondary-actions">
+            <button type="button" id="export-json" disabled>Export JSON</button>
+            <button type="button" id="export-csv" disabled>Export CSV</button>
+          </div>
+        </div>
+      </div>
+      <p id="status" role="status" aria-live="polite">Loading the default simulation.</p>
+      <p class="note">Stop keeps the last completed result. Reset results keeps your settings so you can step from day one. Restore defaults replaces your settings and runs the example.</p>
+      <pre id="error" role="alert" hidden></pre>
     </section>
     <section id="results" aria-labelledby="results-heading">
-      <h2 id="results-heading">Results</h2>
+      <h2 id="results-heading">3. Overview</h2>
       <p id="result-note">No simulation has been run.</p>
-      <div id="summary" class="table-scroll"></div>
+      <div id="summary"></div>
+      <div class="inline-controls"><label for="chart-view">Charts <select id="chart-view"><option value="overview">Prices &amp; funding</option><option value="activity">Customers &amp; stock</option><option value="accounts">Accounts &amp; reserves</option><option value="all">All charts</option></select></label></div>
       <div id="charts" class="charts"></div>
-    </section>
-    <section id="daily-ledger" aria-labelledby="ledger-heading">
-      <h2 id="ledger-heading">Daily ledger</h2>
-      <p>Each row is one policy on one day. Select its day to inspect product flows and the complete returned record. Money columns are cents.</p>
-      <div class="table-scroll" id="ledger"><p>No daily records yet.</p></div>
     </section>
     <section id="day-detail" aria-labelledby="detail-heading">
       <h2 id="detail-heading">Day detail</h2>
-      <label for="selected-day">Day <select id="selected-day" disabled><option>No results</option></select></label>
+      <div class="inline-controls">
+        <label for="selected-day">Day <select id="selected-day" disabled><option>No results</option></select></label>
+        <label for="selected-policy">Policy <select id="selected-policy"><option value="optimized">Balancing feedback</option><option value="fixed">Fixed price</option><option value="both">Compare both</option></select></label>
+      </div>
       <div id="product-detail"><p>No day selected.</p></div>
+    </section>
+    <section id="daily-ledger" aria-labelledby="ledger-heading">
+      <h2 id="ledger-heading">Daily ledger</h2>
+      <p class="note">One row per policy per day. Select a day to inspect it above. Money columns are cents.</p>
+      <label class="checkbox-label"><input type="checkbox" id="ledger-all"> Show every ledger column</label>
+      <div class="table-scroll" id="ledger"><p>No daily records yet.</p></div>
     </section>
     <details id="result-json"><summary>Complete result JSON</summary><pre id="raw-result">No result.</pre></details>
     <details id="licenses"><summary>Licenses and component boundaries</summary><div id="license-text">__LICENSES__</div></details>

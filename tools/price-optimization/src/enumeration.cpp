@@ -42,28 +42,9 @@ class EnumerationBackend final : public SolverBackend {
     std::size_t combinations = 1;
     for (std::size_t i = 0; i < request.products.size(); ++i) {
       const auto& product = request.products[i];
-      const auto hold = std::find_if(product.candidates.begin(), product.candidates.end(),
-          [&](const Candidate& candidate) { return candidate.price == product.previous_price; });
       for (std::size_t k = 0; k < product.candidates.size(); ++k) {
-        const auto& candidate = product.candidates[k];
-        if (candidate.price > product.affordability_ceiling ||
-            (request.funding_balance > 0 && candidate.price > product.previous_price) ||
-            (request.funding_balance < 0 && candidate.price < product.previous_price) ||
-            (request.funding_balance == 0 && candidate.price != product.previous_price) ||
-            std::abs(candidate.price - product.previous_price) * 10000 >
-                product.previous_price * product.max_change_basis_points ||
-            std::any_of(candidate.forecast_units.begin(), candidate.forecast_units.end(),
-                        [&](auto quantity) { return quantity > product.inventory; })) {
-          continue;
-        }
-        bool harmful_increase = false;
-        if (request.funding_balance < 0 && candidate.price > product.previous_price) {
-          for (std::size_t s = 0; s < request.scenarios.size(); ++s) {
-            if ((candidate.price - product.unit_cost) * candidate.forecast_units[s] <
-                (product.previous_price - product.unit_cost) * hold->forecast_units[s]) harmful_increase = true;
-          }
-        }
-        if (harmful_increase) continue;
+        if (!locally_admissible_candidate(request, product, k) ||
+            affordable_alternative(request, product, k)) continue;
         allowed[i].push_back(k);
       }
       if (allowed[i].empty()) {
@@ -135,7 +116,8 @@ class EnumerationBackend final : public SolverBackend {
         // Match the objective representation exposed by evaluate_selection:
         // accumulate in long double, then report/compare the rounded double.
         // Visit original indices in ascending lexicographic order and replace
-        // only on improvement, giving a deterministic tie choice.
+        // only on improvement. Affordable dominated offers were excluded
+        // above; remaining incomparable ties retain original-index order.
         const auto objective = static_cast<double>(expected);
         if (!found || objective < best_expected) {
           found = true;

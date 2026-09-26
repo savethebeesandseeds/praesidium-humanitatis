@@ -5,9 +5,10 @@
 It accepts the [versioned contract](contract.md), runs the AMPL feedback model
 in a separate worker, and emits structured results. It opens no network port,
 publishes no prices, and has no governance or payment actions. The current
-optimization objective is `operating_balance_tracking` version `1`: minimize
-expected absolute funding balance under protected coverage and price-direction
-constraints. Wages remain fixed inputs.
+optimization objective is `operating_balance_tracking` version `2`: minimize
+expected absolute funding balance under protected coverage, price-direction
+and affordable-alternative constraints. Wages remain fixed inputs. The JSON shape
+remains `ph.price.v3`; objective version `1` is explicitly rejected.
 
 ```text
 dashboard server → JSON Lines → price_backend → isolated supervisor
@@ -80,8 +81,8 @@ memory: the output queue is capped and idle output delivery expires.
 
 ## Terminal results
 
-Every `result` identifies `ph.price.v3`, engine `0.4.0`, objective
-`operating_balance_tracking` version `1`, model `public-prices.v3` and the
+Every `result` identifies `ph.price.v3`, engine `0.5.0`, objective
+`operating_balance_tracking` version `2`, model `public-prices.v4` and the
 compiled AMPL model's SHA-256. A parsed request also
 includes its policy id/version and full input snapshot. These are reproducibility
 records, not proof of policy approval or a complete vendor-runtime attestation.
@@ -117,7 +118,8 @@ the permitted price direction.
 Constraint slack is recomputed exactly, with explicit binding flags. Supplied
 forecasts are labeled as input evidence. Candidate exclusion reasons cover
 local affordability, change-cap, inventory, feedback-direction and
-contribution-reducing price-increase violations; they do not claim
+contribution-reducing price-increase violations, plus `affordable_alternative`
+with the alternative's candidate index and price; they do not claim
 to be a complete global infeasibility explanation or economic causal analysis.
 
 Positive funding balance permits decreases or holding; negative balance permits
@@ -130,6 +132,14 @@ and additional liquidity, and schedule each new reserve funding
 requirement once, separately from reserve cash earmarking. Releasing a reserve
 does not restart that requirement. See the [contract](contract.md) for the exact
 formulation and input bounds.
+
+An otherwise locally legal, strictly cheaper candidate for the same SKU excludes
+a higher price when it forecasts at least as many purchases and at least as much
+contribution in every supplied scenario. This preserves modeled coverage while
+preventing extra projected surplus alone from rejecting that cheaper offer.
+The original balance score applies among the remaining choices and can be higher
+than before this protection. It is not a cheapest-feasible-basket objective or a
+claim about actual customer behavior.
 
 Operating liquidity can fund a forecast shortfall with neutral or negative
 earned feedback. It does not create a discount signal or waive any price,

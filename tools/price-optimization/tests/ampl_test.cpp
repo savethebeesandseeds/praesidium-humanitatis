@@ -124,6 +124,17 @@ int main(int argc, char** argv) {
         throw std::runtime_error("insufficient liquidity did not fail exactly: " + fixture.request.request_id);
       }
     }
+    for (const auto& fixture : test::affordability_fixtures(unix_now())) {
+      const auto actual = optimize(fixture.request, *backend);
+      const auto enumerated = optimize(fixture.request, *enumeration);
+      if (!actual.recommendation || !enumerated.recommendation ||
+          actual.recommendation->public_prices != std::vector<Money>{fixture.expected_price} ||
+          enumerated.recommendation->public_prices != std::vector<Money>{fixture.expected_price} ||
+          std::abs(actual.recommendation->expected_absolute_balance - fixture.expected_absolute_balance) > 1e-6 ||
+          std::abs(enumerated.recommendation->expected_absolute_balance - fixture.expected_absolute_balance) > 1e-6) {
+        throw std::runtime_error("AMPL affordability fixture failed " + fixture.request.request_id + ": " + actual.detail);
+      }
+    }
     // A genuine runtime startup error must never be relabeled infeasible.
     // Inspect only; the deliberately missing path is never created.
     const auto missing = std::filesystem::path(argv[1]) / "ph-intentionally-missing-runtime";
@@ -134,7 +145,7 @@ int main(int argc, char** argv) {
         startup_failure.detail.find("AMPL failure: ") != 0) {
       throw std::runtime_error("runtime startup error was not kept as a failure: " + startup_failure.detail);
     }
-    std::cout << "14 AMPL fixtures, 7 sales-feedback fixtures and 3 liquidity fixtures (plus their insufficient-cash variants) agree with bounded enumeration; AMPL presolve status 299 and solver infeasibility distinguished; "
+    std::cout << "14 AMPL fixtures, 7 sales-feedback fixtures, 6 affordability fixtures and 3 liquidity fixtures (plus their insufficient-cash variants) agree with bounded enumeration; AMPL presolve status 299 and solver infeasibility distinguished; "
                  "presolve success 99 independently validated; "
                  "startup failure remains a failure; outputs independently validated\n";
     return 0;

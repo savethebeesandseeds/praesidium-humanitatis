@@ -1,6 +1,77 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Exchange simulation v3 verification
 
+## 2026-09-26: automatic example and settings-first layout
+
+The page now loads and runs its default configuration automatically. Restoring
+defaults repeats that process; resetting results preserves settings for manual
+stepping. Settings appear open before the run controls. Pale section and chart
+backgrounds, grouped buttons and system fonts add visual structure without
+external assets. The compiled runtime and economic model are unchanged.
+
+The packaged standalone suite passed, including embedded worker/native parity
+and the existing UI, import and source checks. New tests exercise the actual
+worker request/response lifecycle and result renderers with a controlled worker
+boundary: loading waits for defaults, submits the configured seed and horizon
+with empty history, then fills the result views. Reset followed by Step requests
+day one. Defaults restoration clears imported history; failed defaults or runs
+do not produce results. Static markup checks confirm open settings before controls.
+These tests do not visually verify browser layout, colors or typography.
+
+## 2026-09-26: compact standalone interface
+
+Reorganized the page into run controls, grouped settings, a short overview,
+selectable chart groups, a day/policy inspector and a compact/full ledger.
+Detailed candidate checks, accounts, forecasts and raw records remain available.
+No C++ logic, configuration defaults, price policy or accounting changed; the
+existing compiled WebAssembly runtime was repackaged with the new interface.
+
+- Standalone embedded worker/native parity, deterministic replay, strict imports,
+  source archive and configuration checks passed.
+- UI regression checks exercise the actual rendering helpers with a minimal DOM:
+  every configuration leaf retains an input and round-trips unchanged; invalid
+  inputs reveal closed settings; chart groups preserve the complete chart set and
+  product-price series; compact/full ledgers retain every row; day/policy choices
+  handle paths of different lengths; inspection leaves results unchanged. View
+  event wiring and control states before, during and after a run are also checked.
+- Price-explanation regressions still pass for funding arithmetic, exclusions,
+  affordability evidence, ties, fixed/continuity labels and safe text insertion.
+- These are automated logic/DOM checks, not a visual browser review. Layout,
+  browser focus behavior and responsive appearance have not been visually verified.
+
+## 2026-09-26: selected-day price explanations
+
+Added the **Why this price?** view and per-candidate `price_comparison` records.
+Each comparison substitutes one product's price while retaining the other
+published prices; exchange-wide costs are deducted once. The C++ model supplies
+eligibility and exclusion evidence. Continuity retains null certified scores;
+its candidate scores are explicitly hypothetical. Pricing policy, consumer
+assumptions and default configuration were unchanged.
+
+- Native: **11/11 CTest entries passed** (3.45 seconds), including independent
+  candidate arithmetic, neutral-direction exclusions, the affordable-alternative
+  witness and a continuity coverage shortfall.
+- Native/WASM: **27 fixtures passed**, including candidate explanations and the
+  existing accounting/history/continuity cases. A new test initially distinguished
+  JavaScript `-0` from integer-money `0`; normalizing its expected zero fixed the
+  assertion without changing model output.
+- Standalone: embedded worker/native parity and rendering-helper checks passed
+  for funding needs, candidate scores and exclusions, ties, fixed/continuity
+  labels, and literal display of HTML-like product text. Browser visual review
+  was not performed; these checks exercise the actual DOM-building functions
+  with a minimal test DOM, not browser layout or interaction.
+- Before/after checksums of all existing output fields matched for the default,
+  thin-cash and no-visit runs after omitting only the new comparison records.
+
+## Previous verification snapshot
+
+Historical evidence for the previous pricing policy. The counts, results and
+scope below describe the 2026-09-21 snapshot, before the affordable-alternative
+protection. The [current contract](../tools/price-optimization/docs/contract.md)
+uses schema `ph.price.v3`, model `public-prices.v4`, engine `0.5.0` and objective
+`operating_balance_tracking` version 2. These earlier checks do not verify that
+policy change; application schema `exchange.sim.v3` remains unchanged.
+
 Verified on 2026-09-21 in the existing approved Debian 12 optimizer container,
 ID `5738ae552c575e91e0d4308b8aa2c66aa170e8dd817282fd7abd5817907d3ff9`.
 Its container definition, mount, volumes, devices and published ports were unchanged.
@@ -15,7 +86,7 @@ the pricing engine retains its separate license.
 
 ## Checks completed
 
-| Check | Current result |
+| Check | Recorded result |
 | --- | --- |
 | AMPL-enabled optimizer | **8/8 CTest entries passed, 8.26 seconds.** Includes 14 general, seven feedback and three liquidity fixtures, plus insufficient-cash variants, checked against bounded enumeration. |
 | Native rebuild after EWMA extraction | **11/11 CTest entries passed, 3.04 seconds.** Includes 44 file-record checks, 1,128 forecasting/consumer checks, 4,989 simulation checks and the independent exponential-smoothing suite. |

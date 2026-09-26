@@ -2,6 +2,7 @@
 #include "ph/price/engine.hpp"
 #include "ampl_data.hpp"
 #include "reference_oracle.hpp"
+#include "feedback_fixtures.hpp"
 #include "synthetic_request.hpp"
 #include <cmath>
 #include <iostream>
@@ -204,6 +205,25 @@ void test_solver_boundary() {
   }
 }
 
+void test_backend_cannot_return_dominated_offer() {
+  const auto request = test::affordability_fixtures(now).front().request;
+  // A backend can report perfectly consistent accounts and the old, better
+  // balance score while still violating the new affordability guard.
+  FixedBackend backend({BackendStatus::optimal, {1, 0}, 600,
+                        "synthetic backend returning the dominated 200 offer", 1600});
+  const auto rejected = optimize(request, backend, [] { return now; });
+  check(rejected.status == SolveStatus::rejected_solution && !rejected.recommendation,
+        "accurate financial output cannot smuggle a dominated higher price past the core");
+  backend.raw = {BackendStatus::optimal, {0, 1}, 1400,
+                 "synthetic backend returning the affordable 160 offer", 2400};
+  const auto accepted = optimize(request, backend, [] { return now; });
+  check(accepted.status == SolveStatus::recommended && accepted.recommendation &&
+        accepted.recommendation->public_prices == std::vector<Money>{160} &&
+        accepted.recommendation->scenario_worker_surplus == std::vector<Money>{1400, 1400} &&
+        accepted.recommendation->scenario_funding_balance == std::vector<Money>{2400, 2400},
+        "cheaper no-worse output preserves exact surplus and funding accounts");
+}
+
 struct CommaDecimal : std::numpunct<char> {
   char do_decimal_point() const override { return ','; }
 };
@@ -236,6 +256,7 @@ int main() {
     test_money_and_policy();
     test_invalid_inputs();
     test_solver_boundary();
+    test_backend_cannot_return_dominated_offer();
     test_numeric_ampl_serialization();
     std::cout << assertions << " price-engine assertions passed\n";
     return 0;

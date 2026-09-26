@@ -113,6 +113,19 @@ async function main() {
   });
   add('free procurement and complete daily waste', c => {c.products.forEach(p => {p.unit_cost=0; p.spoilage_bps=10000;});});
   add('non-default scenario weights', c => {c.scenarios[0].probability=.1; c.scenarios[1].probability=.2; c.scenarios[2].probability=.7;});
+  add('price explanation neutral direction and equal-contribution safeguard', c => {
+    simple(c); c.periods=2; c.consumers.potential_visitors=0; c.products[0].base_demand=0;
+    Object.assign(c.products[0], {candidate_prices:[160,200,220], max_change_bps:10000});
+    c.forecast.prior_sigma_units=0; c.forecast.sigma_multiplier_bps=0;
+  }, result => {
+    const rows=result.optimized.rows;
+    const candidate=(row,price)=>row.products[0].candidate_forecasts.find(c=>c.price===price).price_comparison;
+    assert.deepEqual(candidate(rows[0],160).exclusion_reasons,['operating balance price direction violated for bread']);
+    const guarded=candidate(rows[1],220);
+    assert.equal(guarded.affordable_alternative_price,200); assert.equal(guarded.admissible,false);
+    assert.deepEqual(guarded.exclusion_reasons,['affordable alternative 1 preserves scenario provision and contribution for bread']);
+    assert.equal(guarded.hypothetical_balance_score,rows[1].expected_absolute_balance);
+  });
   add('literal HTML-like product data', c => {c.periods=1; c.products[0].sku='<img src=x onerror=alert(1)>';});
   reject('float money', c => {c.worker_wages=1.5;});
   reject('obsolete aggregate noise setting', c => {c.demand_noise_bps=10000;});
@@ -141,6 +154,7 @@ async function main() {
 function verifyAccounts(result) {
   assert.equal(result.schema_version, 'exchange.sim.v3');
   assert.equal(result.objective, 'operating_balance_tracking');
+  assert.equal(result.objective_version, 2);
   for (const mode of modes) {
     const p=result[mode];
     assert(p.rows.length <= result.config.periods);
@@ -169,6 +183,30 @@ function verifyAccounts(result) {
         assert.equal(product.desired_units, product.budget_rejected_units+product.actual_demand);
         assert.equal(product.closing_lots.reduce((n,lot)=>n+lot.units*lot.unit_cost,0), product.closing_inventory_value);
         if (row.status === 'continuity') assert.equal(product.selected_price, product.previous_price);
+        const published=product.candidate_forecasts.filter(candidate=>candidate.price_comparison.published);
+        assert.equal(published.length,1,'one public price is identified in each explanation');
+        assert.equal(published[0].price,product.selected_price);
+        const evidence=published[0].price_comparison;
+        if (row.status === 'recommended') {
+          assert.equal(evidence.admissible,true); assert.deepEqual(evidence.exclusion_reasons,[]);
+          assert.deepEqual(evidence.scenario_funding_balance,row.scenario_funding_balance);
+          assert(Math.abs(evidence.hypothetical_balance_score-row.expected_absolute_balance)<=1e-8*Math.max(1,row.expected_absolute_balance));
+        } else {
+          assert.equal(row.expected_absolute_balance,null,'continuity does not acquire a certified score through diagnostics');
+          assert.equal(row.expected_funding_balance,null);
+          assert.equal(typeof evidence.hypothetical_balance_score,'number');
+          assert.equal(evidence.admissible,false,'continuity publication remains distinguishable from a valid recommendation');
+        }
+        for (const candidate of product.candidate_forecasts) {
+          const comparison=candidate.price_comparison;
+          assert.equal(comparison.admissible,comparison.exclusion_reasons.length===0);
+          assert.equal(comparison.scenario_contribution.length,result.config.scenarios.length);
+          assert.equal(comparison.scenario_funding_balance.length,result.config.scenarios.length);
+          candidate.saleable_scenario_units.forEach((quantity,index)=>{
+            // Integer money has one zero; JS can produce -0 for a negative margin times zero sales.
+            assert.equal(comparison.scenario_contribution[index],0+(candidate.price-product.unit_cost)*quantity);
+          });
+        }
       }
       cash=row.closing_cash;
     }

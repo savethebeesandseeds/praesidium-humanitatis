@@ -1,11 +1,32 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Development handoff: post-profit-exchange
 
-Updated 2026-09-21. Start with this file, the [project README](../README.md),
+Updated 2026-09-26. Start with this file, the [project README](../README.md),
 [store specification](../STORE_SPECIFICATION.md), [simulation contract](../simulation/CONTRACT.md),
 [models](MODELS.md), [file records](FILES.md) and current
 [verification record](../../../docs/exchange-simulation-verification.md).
 The verification record, not this handoff, is authoritative for checks performed.
+
+The selected-day **Why this price?** view now shows shared funding needs and
+per-candidate `price_comparison` evidence. It compares one price change against
+the other published prices, preserves whole-exchange accounting, and distinguishes
+optimizer recommendations from continuity and configured fixed prices. It adds
+inspection output without changing the pricing policy or consumer model.
+
+The standalone page loads and runs the defaults automatically on opening;
+**Restore defaults & run** repeats that process. **Reset results** clears the output
+for manual stepping. **Settings** appears first and is open initially, followed
+by the run controls and compact overview. All parameters remain in named groups
+and individual product sections. Contiguous solid earth-tone background bands,
+sharp edges and system fonts divide the page without floating cards or external
+assets. Charts are grouped as **Prices & funding**,
+**Customers & stock**, and **Accounts & reserves**; **All charts** shows everything.
+The day inspector selects one policy or **Compare both**. Chart points and ledger
+day buttons select the corresponding policy and day. The ledger starts with key
+columns and offers **Show every ledger column**. Candidate **Why / checks**,
+scenario values, full accounts, product flows and raw records remain expandable.
+Exports retain all data regardless of the visible sections. This is a display
+reorganization; the simulator, pricing rule, consumer model and accounts are unchanged.
 
 ## Purpose and decisions to preserve
 
@@ -22,6 +43,28 @@ preserves forecast contribution in every supplied scenario. Zero history holds
 the starting prices. Salaries are fixed inputs. Do not replace this with expected
 profit maximization, a static cheapest-basket objective or the abandoned staged
 surplus-target formulation.
+
+Keep this operating model in the exchange project; production and distribution
+need their own models. Do not replace the existing pricing feedback with a
+cash-receipts target or introduce a shared operating framework.
+
+The pricing guard excludes a candidate when a strictly cheaper, otherwise locally
+legal candidate for the same SKU forecasts at least as many purchases and at
+least as much contribution in every supplied scenario. All prior price-direction,
+inventory, affordability, change-cap and coverage protections remain. The balance
+objective ranks the remaining choices, so its score may be higher than before;
+extra surplus alone must not reject this cheaper offer. This is a forecast-based
+protection, not a general cheapest-feasible-basket objective. Remaining incomparable
+ties retain existing solver behavior.
+
+Verified 2026-09-24: all 11 native CTest cases, all 8 optimizer CTest cases
+including AMPL/HiGHS, 26 native/WASM fixtures and the standalone HTML/worker
+checks passed. Six hand-calculated affordability fixtures include both candidate
+orders and a one-cent contribution difference near the numeric bound. The search
+limit fixture now uses nonzero forecasts so redundant zero-sales prices cannot
+collapse its candidate grid; the original failure/transaction-rollback assertions
+remain. The consumer model and default configuration are unchanged. This checks
+the declared rule and accounting, not empirical demand or long-run performance.
 
 Keep these quantities separate:
 
@@ -64,8 +107,9 @@ comparator can end on a different date; never hide that difference in totals.
 The application schema is `exchange.sim.v3`. Native run manifests use
 `exchange.run.v1`, input history uses `exchange.history.v1`, events use
 `exchange.assurance.v1`, and output manifest/log schemas are documented in
-FILES.md. The pricing API is `ph.price.v3`, model `public-prices.v3`, engine
-`0.4.0`, objective `operating_balance_tracking` version 1. Its required feedback
+FILES.md. The pricing API is `ph.price.v3`, model `public-prices.v4`, engine
+`0.5.0`, objective `operating_balance_tracking` version 2. Its JSON shape is
+unchanged, but objective version 1 requests are rejected. Its required feedback
 has `funding_balance`, `coverage_credit` and `liquidity_buffer`. Expected absolute
 balance is the score; expected worker surplus is a diagnostic.
 

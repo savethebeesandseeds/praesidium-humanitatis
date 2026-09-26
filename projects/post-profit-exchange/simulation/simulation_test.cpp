@@ -2,10 +2,13 @@
 #include "simulation.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 using Json = nlohmann::json;
@@ -20,11 +23,88 @@ Json run(const Json& config, const Json& history) {
 Json defaults() { return Json::parse(ph::exchange::run_json("{\"op\":\"defaults\"}")).at("config"); }
 void reject(const Json& config, const std::string& message) { require(run(config).at("status") == "error", message); }
 
+void near(double actual, double expected, const std::string& message) {
+  require(std::abs(actual - expected) <= 1e-9 * std::max(1.0, std::abs(expected)), message);
+}
+const Json& candidate_at_price(const Json& product, Amount price) {
+  for (const auto& candidate : product.at("candidate_forecasts"))
+    if (n(candidate, "price") == price) return candidate;
+  throw std::runtime_error("published price is missing from the candidate evidence");
+}
+
+// Check the explanation against the recorded quantities and accounts, without
+// reproducing the forecast or optimizer. A comparison changes one product only;
+// the other products retain their published prices and share one funding need.
+void verify_price_comparisons(const Json& config, const Json& row) {
+  const auto& scenarios = config.at("scenarios");
+  const auto& products = row.at("products");
+  const Amount fixed = n(row, "worker_wages_due") + n(row, "operating_cost_due") + n(row, "reserve_requirement");
+  std::vector<Amount> published_contribution(scenarios.size(), 0);
+  for (const auto& product : products) {
+    const auto& candidate = candidate_at_price(product, n(product, "selected_price"));
+    for (std::size_t s = 0; s < scenarios.size(); ++s)
+      published_contribution[s] += (n(candidate, "price") - n(product, "unit_cost")) * candidate.at("saleable_scenario_units")[s].get<Amount>();
+  }
+  for (const auto& product : products) {
+    const auto& chosen = candidate_at_price(product, n(product, "selected_price"));
+    std::size_t published_count = 0;
+    for (const auto& candidate : product.at("candidate_forecasts")) {
+      const auto& comparison = candidate.at("price_comparison");
+      require(comparison.at("scenario_contribution").size() == scenarios.size() &&
+              comparison.at("scenario_funding_balance").size() == scenarios.size(), "candidate explanation preserves every forecast scenario");
+      double expected_units = 0, expected_contribution = 0, expected_balance = 0, score = 0;
+      Amount minimum_slack = std::numeric_limits<Amount>::max();
+      for (std::size_t s = 0; s < scenarios.size(); ++s) {
+        const double probability = scenarios[s].at("probability").get<double>();
+        const Amount units = candidate.at("saleable_scenario_units")[s].get<Amount>();
+        const Amount contribution = (n(candidate, "price") - n(product, "unit_cost")) * units;
+        const Amount chosen_contribution = (n(chosen, "price") - n(product, "unit_cost")) * chosen.at("saleable_scenario_units")[s].get<Amount>();
+        const Amount surplus = published_contribution[s] - chosen_contribution + contribution - fixed;
+        const Amount balance = n(row, "feedback_adjustment") + surplus;
+        require(comparison.at("scenario_contribution")[s] == contribution, "candidate product contribution subtracts replacement cost");
+        require(comparison.at("scenario_funding_balance")[s] == balance, "candidate balance changes one published price and deducts shared funding needs once");
+        expected_units += probability * units; expected_contribution += probability * contribution;
+        expected_balance += probability * balance; score += probability * std::abs(balance);
+        minimum_slack = std::min(minimum_slack, surplus + n(row, "coverage_credit") + n(row, "liquidity_buffer"));
+      }
+      near(comparison.at("expected_units").get<double>(), expected_units, "candidate expected units use configured scenario weights");
+      near(comparison.at("expected_contribution").get<double>(), expected_contribution, "candidate expected contribution reconciles");
+      near(comparison.at("expected_funding_balance").get<double>(), expected_balance, "candidate expected balance reconciles");
+      near(comparison.at("hypothetical_balance_score").get<double>(), score, "candidate hypothetical score uses absolute scenario balances");
+      require(n(comparison, "minimum_coverage_slack") == minimum_slack, "coverage slack includes explicit support without treating it as earned income");
+      const bool published = n(candidate, "price") == n(product, "selected_price");
+      require(comparison.at("published") == published, "candidate publication marker identifies the actual public price");
+      published_count += published ? 1 : 0;
+      require(comparison.at("admissible").is_boolean() && comparison.at("exclusion_reasons").is_array(), "candidate decision status is explicit");
+      require(comparison.at("admissible").get<bool>() == comparison.at("exclusion_reasons").empty(), "excluded candidates state a reason");
+      if (published && row.at("status") == "recommended") {
+        require(comparison.at("admissible").get<bool>(), "recommended public prices pass their own explanation check");
+        near(score, row.at("expected_absolute_balance").get<double>(), "published explanation agrees with the certified optimization score");
+        require(comparison.at("scenario_funding_balance") == row.at("scenario_funding_balance"), "published candidate preserves certified scenario accounts");
+      }
+      if (!comparison.at("affordable_alternative_price").is_null()) {
+        const Amount alternative_price = n(comparison, "affordable_alternative_price");
+        const auto& alternative = candidate_at_price(product, alternative_price);
+        require(alternative_price < n(candidate, "price"), "affordability witness is a cheaper candidate");
+        for (std::size_t s = 0; s < scenarios.size(); ++s) {
+          const Amount alternative_units = alternative.at("saleable_scenario_units")[s].get<Amount>();
+          require(alternative_units >= candidate.at("saleable_scenario_units")[s].get<Amount>() &&
+                  (alternative_price - n(product, "unit_cost")) * alternative_units >= comparison.at("scenario_contribution")[s].get<Amount>(),
+                  "affordability witness serves and contributes at least as much in every scenario");
+        }
+        require(!comparison.at("admissible").get<bool>(), "guard witness excludes the higher price");
+      }
+    }
+    require(published_count == 1, "each product has exactly one published candidate explanation");
+  }
+}
+
 // Independent transaction identities, without reproducing the procurement,
 // pricing, forecasting or FIFO implementation.
 void verify_accounts(const Json& result) {
   require(result.at("status") == "ok", "simulation failed: " + result.dump());
   require(result.at("schema_version") == "exchange.sim.v3", "current simulation schema");
+  require(result.at("objective_version") == 2, "affordability-protected objective version is recorded");
   const auto& config = result.at("config");
   for (const auto* mode : {"optimized", "fixed"}) {
     const auto& path = result.at(mode); const auto& summary = path.at("summary");
@@ -32,6 +112,7 @@ void verify_accounts(const Json& result) {
     Amount cash = n(config, "initial_cash"), reserve = n(config, "initial_reserve"), arrears = 0;
     Amount maximum_target = reserve, inventory = n(summary, "initial_inventory_value");
     for (const auto& row : path.at("rows")) {
+      verify_price_comparisons(config, row);
       require(n(row, "opening_cash") == cash && n(row, "opening_reserve") == reserve &&
               n(row, "opening_inventory_value") == inventory, "opening balances carry executed state between days");
       require(n(row, "closing_cash") == cash - n(row, "procurement") + n(row, "revenue") -
@@ -121,6 +202,36 @@ Json simple() {
   p["initial_stock"] = 100; p["target_stock"] = 100; p["base_demand"] = 0; p["elasticity_bps"] = 0;
   c["consumers"]["potential_visitors"] = 0;
   return c;
+}
+
+void explanation_reasons() {
+  auto c = simple(); c["periods"] = 2;
+  c["products"][0]["candidate_prices"] = {160, 200, 220};
+  c["products"][0]["max_change_bps"] = 10000;
+  const auto result = run(c); verify_accounts(result);
+  const auto& rows = result.at("optimized").at("rows");
+  const auto& neutral = candidate_at_price(rows[0].at("products")[0], 160).at("price_comparison");
+  require(neutral.at("exclusion_reasons") == Json::array({"operating balance price direction violated for bread"}),
+          "opening neutral balance explains why cheaper prices are excluded");
+  const auto& guarded = candidate_at_price(rows[1].at("products")[0], 220).at("price_comparison");
+  require(n(guarded, "affordable_alternative_price") == 200 && guarded.at("admissible") == false &&
+          guarded.at("exclusion_reasons") == Json::array({"affordable alternative 1 preserves scenario provision and contribution for bread"}),
+          "zero-demand equal-contribution comparison names the cheaper permitted hold instead of inventing a lower score");
+  near(guarded.at("hypothetical_balance_score").get<double>(), rows[1].at("expected_absolute_balance").get<double>(),
+       "affordability exclusion can apply even when financial scores tie");
+  c = simple(); c["periods"] = 1; c["initial_cash"] = 100; c["worker_wages"] = 1000;
+  const auto unfunded = run(c); verify_accounts(unfunded);
+  const auto& row = unfunded.at("optimized").at("rows")[0];
+  const auto& published = row.at("products")[0].at("candidate_forecasts")[0].at("price_comparison");
+  require(row.at("status") == "continuity" && row.at("expected_absolute_balance").is_null() &&
+          row.at("expected_funding_balance").is_null() && published.at("published") == true && published.at("admissible") == false,
+          "continuity publication is not a certified feasible choice");
+  require(n(published, "minimum_coverage_slack") == -900 && published.at("hypothetical_balance_score") == 1000 &&
+          published.at("exclusion_reasons") == Json::array({
+              "wages, operating costs, and reserve not covered in scenario adverse",
+              "wages, operating costs, and reserve not covered in scenario expected",
+              "wages, operating costs, and reserve not covered in scenario high"}),
+          "continuity retains hypothetical arithmetic and identifies each uncovered scenario without fabricating an optimal score");
 }
 
 void continuity_and_insolvency() {
@@ -215,9 +326,14 @@ void history_and_uncertainty() {
 void catalog_and_limits() {
   auto c = simple(); c["periods"] = 3; const auto product = c.at("products")[0]; c["products"] = Json::array();
   c["reserve_target"] = 100; c["reserve_contribution"] = 10;
+  // Keep nonzero cold-start forecasts with no realized visits: higher prices
+  // then have distinct contributions, so the affordability guard cannot fold
+  // the candidate grid before this search-budget/transaction-rollback test.
+  c["consumers"]["potential_visitors"] = 1; c["consumers"]["visit_probability_bps"] = 0;
   for (int i = 0; i < 12; ++i) {
     auto p = product; p["sku"] = "staple-" + std::to_string(i); p["label"] = "Staple " + std::to_string(i);
     p["candidate_prices"] = {200, 220}; p["max_change_bps"] = 10000; p["initial_stock"] = 1; p["target_stock"] = 2; p["spoilage_bps"] = 10000;
+    p["base_demand"] = 1;
     c["products"].push_back(p);
   }
   const auto expanded = run(c); verify_accounts(expanded);
@@ -265,7 +381,7 @@ void replay_and_validation() {
 
 int main() {
   try {
-    continuity_and_insolvency(); fifo_reference(); actual_feedback(); history_and_uncertainty(); catalog_and_limits(); replay_and_validation();
+    explanation_reasons(); continuity_and_insolvency(); fifo_reference(); actual_feedback(); history_and_uncertainty(); catalog_and_limits(); replay_and_validation();
     std::cout << checks << " exchange simulation checks passed\n"; return 0;
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

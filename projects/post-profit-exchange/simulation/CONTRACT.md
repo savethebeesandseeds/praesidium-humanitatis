@@ -172,18 +172,29 @@ subtract only newly scheduled reserve funding. The engine's signed adjustment
 preserved at a minimum magnitude of one cent. Endowments never enter `B`.
 
 For scenario surplus `m_s` after fixed obligations and today's reserve requirement,
-the objective is `sum(probability_s * abs(b + m_s))`. Positive `b` permits lower
-or held prices; negative permits higher or held prices; zero holds. Increases
+the objective among allowed candidates is `sum(probability_s * abs(b + m_s))`.
+Positive `b` permits lower or held prices; negative permits higher or held prices;
+zero holds. Increases
 must preserve the product's contribution relative to holding in every supplied
 saleable-unit scenario. Wages are fixed. Limits can block useful price recovery.
+
+A candidate is excluded when a strictly cheaper candidate for the same SKU
+passes the local affordability, change-cap, inventory, direction and safe-increase
+rules and forecasts both at least as many purchases and at least as much
+contribution in every supplied scenario. This affordable-alternative protection
+cannot worsen modeled coverage. The remaining balance score may be higher than
+before, because extra surplus no longer justifies choosing such a higher price.
+The rule relies on supplied forecasts; it does not rank all feasible baskets
+by price or change ties between remaining incomparable choices.
 
 Let `liquid = max(0,cash_after_procurement-wage_arrears-operating_arrears)`.
 Earned credit `C` is zero unless `b > 0`; then it is
 `min(max(B,0),max(liquid-reserve,0))`. Other liquidity is `L = liquid-C`.
 Protected scenario coverage is `m_s + C + L >= 0`. Both can support a temporary
 forecast deficit, but neither replaces signed history in the objective or turns
-opening cash into earned funding. This is the `ph.price.v3`/`public-prices.v3`
-engine `0.4.0` interface, with objective `operating_balance_tracking` version 1.
+opening cash into earned funding. This is the `ph.price.v3`/`public-prices.v4`
+engine `0.5.0` interface, with objective `operating_balance_tracking` version 2.
+The JSON shape is unchanged; objective version 1 requests are rejected.
 
 The dynamic reserve target combines the configured minimum with `H` days of
 expected fixed-cost shortfall and a `z`-sigma common adverse contribution shock.
@@ -249,8 +260,10 @@ insolvency rule is a simulation condition, not a legal determination.
 ## Results and replay
 
 Success contains `schema_version`, `status:"ok"`, complete `config` and `history`,
-`engine`, `objective`, `forecast_cost_basis:"current_replacement_cost"`,
+`engine`, `objective`, `objective_version:2`, `forecast_cost_basis:"current_replacement_cost"`,
 `realized_cost_basis:"FIFO"`, `optimized`, `fixed`, `comparison` and `limitations`.
+The schema remains `exchange.sim.v3`; the explicit objective version identifies
+the affordability protection without changing the simulation's accounting schema.
 Each path has `{mode, summary, rows, events}`. Rows are chronological and products
 retain configured order. `optimized` is the API key for balancing feedback.
 
@@ -268,6 +281,35 @@ pre-update forecast and observation diagnostic, actual affordable demand, sales,
 budget rejections, stock-lost units, spoilage, FIFO cost, revenue and closing value.
 `requested_units` in this product ledger is procurement requested; consumer
 `requested_units` is affordable shopping demand. Do not conflate the two.
+
+Each `products[].candidate_forecasts[]` entry contains a `price_comparison`
+record for the selected-day **Why this price?** view:
+
+- `expected_units`, `expected_contribution` and `scenario_contribution[]` use
+  saleable forecast quantities and the product's current replacement cost.
+- `scenario_funding_balance[]`, `expected_funding_balance` and
+  `hypothetical_balance_score` describe the whole exchange when only this
+  product's candidate price replaces its published price. Other published prices
+  stay fixed. Wages, operations and the scheduled reserve requirement are
+  subtracted once, then the signed feedback adjustment is added. It is earned
+  funding feedback, not cash or asset value. Expected values use scenario
+  probabilities; the hypothetical score is expected absolute funding balance.
+- `minimum_coverage_slack` is the smallest scenario surplus plus earned coverage
+  credit and available liquidity. Coverage does not change the balance score.
+- `admissible` and `exclusion_reasons[]` report whether that comparison passes
+  the applicable protections and explain failures. Reasons are plain messages,
+  not a stable machine-readable grammar. `affordable_alternative_price` names
+  the cheaper protective alternative when one applies, otherwise it is null.
+- `published` identifies the price actually used for that day's trades.
+
+Comparisons use forecasts available before trading; they do not explain actual
+purchases after the fact. No share of fixed costs is assigned to an individual
+SKU. These numerical counterfactuals are not optimizer recommendations or proof
+of portfolio optimality or cheapest prices. A continuity row still has null
+`expected_absolute_balance`, even when its candidate comparisons contain
+hypothetical scores. The fixed-price path compares only its configured price,
+without ranking alternatives. This inspection output changes neither pricing
+policy nor the consumer model or default configuration.
 
 Summary records cumulative revenue, procurement, costs, wages and operations due/
 paid, sales, waste, unmet demand and visitor gates; final cash, reserve, arrears,

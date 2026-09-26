@@ -128,6 +128,49 @@ Validation validate_request(const Request& r, Timestamp now) {
   return v;
 }
 
+bool locally_admissible_candidate(const Request& r, const Product& p, std::size_t k) {
+  if (k >= p.candidates.size()) return false;
+  const auto& c = p.candidates[k];
+  if (c.price > p.affordability_ceiling ||
+      std::abs(c.price - p.previous_price) * 10000 > p.previous_price * p.max_change_basis_points ||
+      (r.funding_balance > 0 && c.price > p.previous_price) ||
+      (r.funding_balance < 0 && c.price < p.previous_price) ||
+      (r.funding_balance == 0 && c.price != p.previous_price)) return false;
+  const auto hold = std::find_if(p.candidates.begin(), p.candidates.end(),
+      [&](const Candidate& candidate) { return candidate.price == p.previous_price; });
+  for (std::size_t s = 0; s < r.scenarios.size(); ++s) {
+    if (c.forecast_units[s] > p.inventory) return false;
+    if (r.funding_balance < 0 && c.price > p.previous_price &&
+        (c.price - p.unit_cost) * c.forecast_units[s] <
+            (p.previous_price - p.unit_cost) * hold->forecast_units[s]) return false;
+  }
+  return true;
+}
+
+std::optional<std::size_t> affordable_alternative(const Request& r, const Product& p,
+                                                std::size_t k) {
+  if (!locally_admissible_candidate(r, p, k)) return std::nullopt;
+  const auto& current = p.candidates[k];
+  std::optional<std::size_t> best;
+  for (std::size_t j = 0; j < p.candidates.size(); ++j) {
+    const auto& alternative = p.candidates[j];
+    if (alternative.price >= current.price ||
+        (best && alternative.price >= p.candidates[*best].price) ||
+        !locally_admissible_candidate(r, p, j)) continue;
+    bool preserves_provision_and_funding = true;
+    for (std::size_t s = 0; s < r.scenarios.size(); ++s) {
+      if (alternative.forecast_units[s] < current.forecast_units[s] ||
+          (alternative.price - p.unit_cost) * alternative.forecast_units[s] <
+              (current.price - p.unit_cost) * current.forecast_units[s]) {
+        preserves_provision_and_funding = false;
+        break;
+      }
+    }
+    if (preserves_provision_and_funding) best = j;
+  }
+  return best;
+}
+
 Evaluation evaluate_selection(const Request& r, const std::vector<std::size_t>& indices,
                               Timestamp now) {
   Evaluation evaluation{validate_request(r, now), std::nullopt};
@@ -157,6 +200,10 @@ Evaluation evaluate_selection(const Request& r, const std::vector<std::size_t>& 
       continue;
     }
     const auto& c = p.candidates[indices[i]];
+    if (const auto alternative = affordable_alternative(r, p, indices[i])) {
+      errors.push_back("affordable alternative " + std::to_string(*alternative) +
+                       " preserves scenario provision and contribution for " + p.sku);
+    }
     if (c.price > p.affordability_ceiling) errors.push_back("affordability ceiling violated for " + p.sku);
     if (std::abs(c.price - p.previous_price) * 10000 > p.previous_price * p.max_change_basis_points) {
       errors.push_back("price change cap violated for " + p.sku);

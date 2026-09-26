@@ -86,11 +86,10 @@ results. Conclusions apply only to the conditions evaluated.
 | Project | Economic model under study | Current evidence boundary |
 | --- | --- | --- |
 | [post-profit-exchange](../projects/post-profit-exchange/README.md) | Worker-governed store operation centered on public-price exchange, with distribution and allocation of inventory, budgets and surplus. | Standalone synthetic C++/WebAssembly simulation, reconciled accounts and actual-sales feedback; empirical stability and operational evaluation remain open. |
-| [Suffering mitigation](../projects/suffering-mitigation/README.md) | Allocation of limited response resources according to human need and evaluated benefit. | Research definition. A concrete setting, allocation mechanism and intervention evaluation still need to be developed; forecasting validation is a separate prerequisite for forecast-based use. |
 
 Production is part of the institution's mandate. Factory and laboratory models
-are prospective demonstrations with no project folders or validated operating
-models yet. Broader exchange and allocation models can be studied as the program
+are prospective demonstrations; the production folder is a placeholder with no
+operating model yet. Broader exchange and allocation models can be studied as the program
 develops; the current portfolio does not exhaust the four areas.
 
 Reusable forecasting and optimization capabilities belong in `tools/`. Their

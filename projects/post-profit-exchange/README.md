@@ -58,7 +58,7 @@ This project owns the store's operating model, state, workflows, simulator and
 plain browser controls/charts. The browser build calls the shared C++ pricing
 core through an explicitly selected bounded enumeration backend. A future
 Linux service adapter can use the optimizer's `ph.price.v3` AMPL interface
-(engine `0.4.0`, model `public-prices.v3`, objective version `1`).
+(engine `0.5.0`, model `public-prices.v4`, objective version `2`).
 The reusable tool owns the pricing formulation, solving and independent result
 checks; it has no dependency on this application's code.
 
@@ -83,8 +83,8 @@ are later work.
 
 Factory and laboratory demonstrations would study **production** in separate
 projects under `projects/`, with their own operating specifications and tool
-integrations. They are outside this store project's scope; no such project
-folders are created yet.
+integrations. They are outside this store project's scope; the production
+folder remains a placeholder.
 
 ## Standalone WebAssembly simulation
 
@@ -93,11 +93,36 @@ modern browser. It embeds the compiled C++ WebAssembly, controls and SVG charts;
 it needs no server, CDN, AMPL installation or network connection. The file also
 contains component licenses and a downloadable ZIP of corresponding source.
 
-Change the numeric inputs, then use **Step one day** or **Run all days**. **Stop**
-terminates the simulation worker. The page exposes all parameters, exact daily
-ledgers, product flows, price and inventory charts, cash, reserves, unpaid wages,
-waste and unmet demand. JSON/CSV exports preserve results. Values are integer
-minor currency units; one simulated period is one day, with one pricing update.
+Opening the page loads and runs the default configuration automatically, so the
+charts and results are populated without a separate click. **Settings** appears
+first and is open initially; the run controls follow it. Change products, costs,
+consumer assumptions or forecasts, then use **Run all days**. Use **Reset results**
+followed by **Step one day** to inspect a run incrementally. **Restore defaults & run**
+loads and runs the original example again. Settings and individual product
+controls are grouped in expandable sections; every parameter remains available.
+**Stop** terminates the worker and keeps the last completed result. Values are
+integer minor currency units; one period is one day, with one pricing update.
+
+**Overview** shows the main totals and **Prices & funding** charts. The chart
+selector also offers **Customers & stock**, **Accounts & reserves** and
+**All charts**. Expand the totals for the full accounts and product summaries.
+In **Day detail**, select a day and either policy, or **Compare both**. Selecting
+a chart point or ledger day opens the corresponding day's policy. The ledger
+starts with key columns; **Show every ledger column** exposes the full table.
+JSON/CSV exports retain the complete results regardless of the current view.
+
+The **Why this price?** view explains a selected day's funding needs, signed
+adjustment from earlier results and candidate prices. It shows forecast purchases,
+contribution toward costs, the resulting exchange-wide balance and reasons an
+alternative is excluded, including the affordable-alternative protection. Each
+comparison changes one product's price while keeping the other published prices
+fixed; fixed costs remain exchange-wide. These are forecast comparisons, not
+actual customer outcomes or a second optimizer recommendation. The fixed-price
+path explains its configured price only. Expand a product and its **Why / checks**
+to inspect candidate exclusions; further sections expose individual scenarios,
+funding calculations, product flows, forecasts and raw records. The underlying
+comparisons are included in JSON records as each candidate's `price_comparison`.
+These display choices do not change the pricing policy, consumer model or accounts.
 
 Use **Open central .cfg** and **Open history records .json** to load a saved run
 definition and its separate observation file. Browser file access is explicit;
@@ -203,8 +228,9 @@ forecast alone does not establish price elasticity.
 
 The current engine selects one public price per product, subject to the
 approved bounds and projected budget coverage in every supplied scenario.
-Its objective minimizes expected absolute funding balance after adding that
-period's forecast surplus to the signed history adjustment. Wages are fixed
+Among candidates allowed by those protections, its objective minimizes expected
+absolute funding balance after adding that period's forecast surplus to the
+signed history adjustment. Wages are fixed
 inputs. Earned, cash-backed funding can support a current shortfall through a
 separate coverage credit. Other available cash is an explicit liquidity buffer,
 also usable for temporary forecast coverage. Neither becomes earned history or
@@ -216,8 +242,17 @@ reference prices while collecting actual operating evidence. An increase must
 preserve forecast contribution relative to holding in every scenario, so weak
 sales do not trigger a rise that would worsen the modeled funding gap. Caps,
 inventory or demand response can block movement or recovery; the result makes
-holds and failed decisions visible. The goal is to approach funding balance,
-not maximize surplus or minimize a static basket price.
+holds and failed decisions visible.
+
+A higher price is excluded when an otherwise locally legal, strictly cheaper
+candidate for that same product forecasts at least as many purchases and at
+least as much contribution in every supplied scenario. Extra projected surplus
+alone cannot justify rejecting that cheaper offer. Direction, inventory, price
+limits and coverage still apply. The financial balance score can be higher
+because the former higher-price choice is no longer eligible. This is a narrow
+protection based on supplied forecasts, not a claim about actual customers or
+a rule to choose the cheapest feasible basket. Remaining incomparable choices
+still use the balance objective.
 
 The engine has no customer identity,
 individual willingness-to-pay, worker scoring, or competitor-coordination input.
